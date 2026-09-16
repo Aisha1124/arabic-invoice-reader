@@ -1,0 +1,236 @@
+# CLAUDE.md
+
+Project constitution. Read this fully before writing any code. Re-read before each new task.
+
+---
+
+## 1. What this project is
+
+An Arabic/English invoice extraction service. It takes an invoice image, returns validated structured JSON aligned to ZATCA tax-invoice fields, flags low-confidence fields for human review, and logs every extraction for audit.
+
+This is a portfolio-grade production artifact, not a demo. The thing being proven is engineering discipline: measured accuracy, handled failure, auditable output.
+
+**Not in scope.** This is an extraction and validation layer. It is NOT a certified ZATCA e-invoicing clearance solution, it does not submit to the Fatoora platform, and it must never claim to. Any README or UI text implying certification is a bug.
+
+---
+
+## 2. Hard rules
+
+These are not suggestions. Violating any of them means the task is not done.
+
+1. **Never invent a fact.** If you do not know a model name, an API signature, a field requirement, or a library behaviour, stop and say so. Do not guess and do not write plausible-looking placeholder values presented as real.
+2. **No unnecessary code.** No abstraction layers for one implementation. No config systems for three settings. No "future-proofing." If a function has one caller and five lines, inline it.
+3. **No dead code.** No commented-out blocks, no unused imports, no functions nothing calls, no `TODO` left behind without an open issue reference.
+4. **Every error path is handled explicitly.** No bare `except:`. No silently swallowed exceptions. If something can fail, decide what happens and write it down.
+5. **Run the code before claiming it works.** Execute it. Read the actual output. If a test exists, run it. "This should work" is not acceptable.
+6. **Fix the cause, not the symptom.** Do not wrap a failing call in a retry to make an error go away. Find out why it failed.
+7. **One task at a time.** Do not build ahead. Do not implement Phase 3 while asked for Phase 1.
+8. **Ask before adding a dependency.** Every new package must be justified in one sentence.
+
+---
+
+## 3. Cost discipline
+
+The only spend on this project is the OpenAI API key. Treat it as scarce.
+
+- **Cache every model response by image SHA-256.** Cache directory: `.cache/`. Never call the API twice for the same image.
+- Evaluation runs must read from cache by default. A flag `--no-cache` forces a fresh run.
+- Never loop the API over a full dataset. The working set is 30 images, fixed.
+- Log the token count and estimated cost of every call. Print a total at the end of any batch run.
+- Before any batch operation that will exceed 50 API calls, stop and ask.
+
+---
+
+## 4. Stack
+
+Fixed. Do not substitute.
+
+| Layer | Choice |
+|---|---|
+| Language | Python 3.11+ |
+| API | FastAPI |
+| Validation | Pydantic v2 |
+| Model | OpenAI vision, model name from `OPENAI_MODEL` env var |
+| Storage | SQLite locally (`data/app.db`); Postgres via `DATABASE_URL` if set |
+| Tests | pytest |
+| Formatting | ruff (format + lint) |
+| Frontend | One plain HTML page. No React, no framework, no build step. |
+
+**Model name:** never hardcode it. Read `OPENAI_MODEL` from environment. If unset, fail with a clear message telling the user to set it. Do not assume which vision models exist — the user sets this.
+
+---
+
+## 5. Repository layout
+
+Create exactly this. Nothing else at the top level.
+
+```
+arabic-invoice-reader/
+├── CLAUDE.md
+├── README.md
+├── .env.example
+├── .gitignore
+├── requirements.txt
+├── app/
+│   ├── __init__.py
+│   ├── main.py          # FastAPI app, routes only
+│   ├── schema.py        # Pydantic models
+│   ├── extract.py       # model call + response parsing
+│   ├── validate.py      # business rules, confidence gating
+│   ├── store.py         # database + audit log
+│   └── cache.py         # SHA-256 response cache
+├── static/
+│   └── index.html       # upload page
+├── eval/
+│   ├── samples/               # 30 PNG invoices (gitignored)
+│   ├── ground_truth.json      # exact field values
+│   ├── README.md              # dataset documentation
+│   ├── generate_invoices.py   # regenerates the set
+│   ├── fonts/                 # Arabic fonts for the generator
+│   ├── load_data.py           # reads and validates the set
+│   └── run_eval.py            # accuracy measurement
+├── tests/
+│   ├── test_schema.py
+│   ├── test_validate.py
+│   └── test_extract.py
+└── docs/
+    └── data-flow.md     # PDPL data-flow note
+```
+
+---
+
+## 6. The data schema
+
+This is the contract. Everything else serves it.
+
+```python
+class LineItem(BaseModel):
+    description: str
+    quantity: Decimal
+    unit_price: Decimal
+    line_total: Decimal
+    vat_rate: Decimal          # e.g. 0.15
+    vat_amount: Decimal
+
+class Invoice(BaseModel):
+    invoice_number: str | None
+    invoice_date: date | None
+    invoice_type: Literal["standard", "simplified", "unknown"]
+    seller_name: str | None
+    seller_vat_number: str | None    # 15-digit KSA TIN when present
+    buyer_name: str | None
+    buyer_vat_number: str | None
+    line_items: list[LineItem]
+    subtotal: Decimal | None          # total excluding VAT
+    vat_total: Decimal | None
+    total: Decimal | None             # total including VAT
+    currency: str                      # default "SAR"
+```
+
+**All monetary values use `Decimal`, never `float`.** Float arithmetic on money is a correctness bug.
+
+Every field carries a confidence score, held in a parallel structure:
+
+```python
+class FieldConfidence(BaseModel):
+    field: str
+    confidence: float          # 0.0 to 1.0
+    needs_review: bool
+```
+
+---
+
+## 7. Validation rules
+
+`validate.py` implements these. Each returns a named, human-readable finding — never a bare boolean.
+
+**Arithmetic**
+- Every line: `quantity * unit_price` equals `line_total` within 0.01
+- Every line: `line_total * vat_rate` equals `vat_amount` within 0.01
+- `sum(line_totals)` equals `subtotal` within 0.01
+- `sum(vat_amounts)` equals `vat_total` within 0.01
+- `subtotal + vat_total` equals `total` within 0.01
+
+**ZATCA structural**
+- Seller VAT number, when present, is exactly 15 digits
+- If `invoice_type == "standard"`, a missing `buyer_vat_number` is flagged. This is the most common real-world clearance rejection.
+- If every line shares one lumped VAT figure rather than per-line VAT, flag it. This is the second most common rejection.
+- Simplified invoices: seller name, seller VAT number, timestamp, total, and VAT amount must all be present. These are the five TLV QR fields.
+
+**Confidence gating**
+- Any field below `CONFIDENCE_THRESHOLD` (default 0.80, from env) sets `needs_review = true`
+- Any failed arithmetic check forces `needs_review = true` on the fields involved
+- An invoice with any `needs_review` field returns HTTP 200 with `"status": "needs_review"` — it is not an error, it is a queue
+
+---
+
+## 8. Audit log
+
+Every extraction writes one immutable row. Append-only. No updates, no deletes.
+
+| Column | Meaning |
+|---|---|
+| `id` | UUID |
+| `timestamp_utc` | when |
+| `image_sha256` | which file, without storing the file |
+| `model` | which model version produced this |
+| `prompt_version` | which prompt version produced this |
+| `fields_extracted` | count |
+| `fields_flagged` | count |
+| `validation_findings` | JSON array of findings |
+| `latency_ms` | duration |
+| `estimated_cost_usd` | spend |
+
+**Never write invoice content, names, VAT numbers, or images into the audit log.** The log records that an extraction happened and how it went, not what was in it. This is the PDPL-safe design and it is the point.
+
+---
+
+## 9. Privacy rules
+
+- Uploaded images are processed in memory and discarded. Never written to disk outside `.cache/` (hash-keyed, gitignored).
+- `.cache/` and `data/` are in `.gitignore`. No sample invoice with real data ever enters git.
+- Use only the PII-redacted variants of public datasets.
+- `docs/data-flow.md` states plainly: what is sent to OpenAI, what is stored, what is not stored, where it is hosted, and how deletion works. Write what the code actually does. If the code does not implement deletion, the document says so.
+
+---
+
+## 10. Testing
+
+- `tests/test_validate.py` covers every rule in section 7, with a passing case and a failing case each. These need no API key.
+- `tests/test_schema.py` covers Decimal parsing, missing optional fields, and malformed input.
+- `tests/test_extract.py` uses a recorded fixture response. It must not call the API.
+- Tests must run offline. A test suite requiring a paid API call is a broken test suite.
+- Run `pytest` before declaring any task complete. Paste the actual output.
+
+---
+
+## 11. Code style
+
+- Type hints on every function signature.
+- Docstrings only where the reason is not obvious from the name. No docstring that restates the function name.
+- Functions under 40 lines. If longer, it does more than one thing.
+- No comments explaining what a line does. Comments explain why, and only when why is not obvious.
+- `ruff format` and `ruff check` clean before any task is called done.
+- Errors raised must say what failed, what was expected, and what was received.
+
+---
+
+## 12. Definition of done
+
+A task is complete only when all of these hold:
+
+1. Code runs. You executed it and read the output.
+2. `pytest` passes. You ran it and pasted the result.
+3. `ruff check` is clean.
+4. No dead code, no unused imports, no leftover debug prints.
+5. Anything you were unsure about is stated explicitly, not guessed.
+
+If any of these fail, say which one and why. Do not report success.
+
+---
+
+## 13. When stuck
+
+Say so directly. State what you tried, what happened, and what you need.
+
+Never: silently simplify the task, fake a result, stub something and describe it as working, or continue past an error hoping it resolves later.

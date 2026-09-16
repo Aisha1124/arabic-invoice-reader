@@ -1,0 +1,26 @@
+# Model response cache and local database — hash-keyed / may contain invoice data (CLAUDE.md section 9)
+.cache/
+data/
+
+# Secrets
+.env
+
+# Python
+__pycache__/
+*.pyc
+.pytest_cache/
+.ruff_cache/
+
+# Virtualenvs
+.venv/
+venv/
+env/
+
+# Evaluation dataset archive (extracted into eval/)
+eval.zip
+
+# Evaluation samples (shipped via eval.zip, regenerable with eval/generate_invoices.py)
+eval/samples/
+
+# Editor/tooling
+.qodo/
