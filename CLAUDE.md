@@ -164,6 +164,15 @@ class FieldConfidence(BaseModel):
 - Any failed arithmetic check forces `needs_review = true` on the fields involved
 - An invoice with any `needs_review` field returns HTTP 200 with `"status": "needs_review"` — it is not an error, it is a queue
 
+**Severity mapping**
+
+Every finding carries `severity: "error" | "warning"`.
+
+- `"error"`: any arithmetic check that fails. The numbers do not add up, so the extraction is wrong. Forces `needs_review = true` on the fields involved.
+- `"warning"`: ZATCA structural checks, and confidence-threshold breaches. The extraction may be correct and the invoice itself is non-compliant. Flagged for the reviewer, but does not by itself mean the extraction failed.
+
+These are different failures. An arithmetic error means we read the invoice wrong. A structural finding means we read it right and the invoice has a compliance problem. Conflating them would make the eval numbers meaningless — we could not tell extraction failures from real ZATCA defects in the source documents.
+
 ---
 
 ## 8. Audit log
