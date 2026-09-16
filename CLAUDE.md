@@ -71,6 +71,7 @@ arabic-invoice-reader/
 ├── .env.example
 ├── .gitignore
 ├── requirements.txt
+├── ruff.toml          # excludes vendored eval/generate_invoices.py and *.md
 ├── app/
 │   ├── __init__.py
 │   ├── main.py          # FastAPI app, routes only
@@ -90,6 +91,7 @@ arabic-invoice-reader/
 │   ├── load_data.py           # reads and validates the set
 │   └── run_eval.py            # accuracy measurement
 ├── tests/
+│   ├── __init__.py      # makes the repo root importable under pytest
 │   ├── test_schema.py
 │   ├── test_validate.py
 │   └── test_extract.py

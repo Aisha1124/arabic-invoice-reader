@@ -1,0 +1,3 @@
+# generate_invoices.py is vendored with the dataset, not our code.
+# Markdown is excluded so ruff does not reformat code blocks in documentation.
+extend-exclude = ["eval/generate_invoices.py", "*.md"]
