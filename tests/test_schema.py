@@ -1,3 +1,4 @@
+from datetime import UTC, datetime
 from decimal import Decimal
 
 import pytest
@@ -44,11 +45,22 @@ def test_invoice_totals_parse_decimal_strings_with_thousands_separator() -> None
     assert invoice.total == Decimal("11500.00")
 
 
+def test_invoice_timestamp_parses_iso_8601_with_utc_suffix() -> None:
+    invoice = Invoice(
+        invoice_type="simplified",
+        line_items=[],
+        invoice_timestamp="2026-07-31T15:38:00Z",
+    )
+
+    assert invoice.invoice_timestamp == datetime(2026, 7, 31, 15, 38, tzinfo=UTC)
+
+
 def test_invoice_with_every_optional_field_absent() -> None:
     invoice = Invoice(invoice_type="unknown", line_items=[])
 
     assert invoice.invoice_number is None
     assert invoice.invoice_date is None
+    assert invoice.invoice_timestamp is None
     assert invoice.seller_name is None
     assert invoice.seller_vat_number is None
     assert invoice.buyer_name is None

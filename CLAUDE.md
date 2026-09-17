@@ -117,6 +117,7 @@ class LineItem(BaseModel):
 class Invoice(BaseModel):
     invoice_number: str | None
     invoice_date: date | None
+    invoice_timestamp: datetime | None   # ZATCA TLV tag 3; ISO 8601
     invoice_type: Literal["standard", "simplified", "unknown"]
     seller_name: str | None
     seller_vat_number: str | None    # 15-digit KSA TIN when present
@@ -152,6 +153,7 @@ class FieldConfidence(BaseModel):
 - `sum(line_totals)` equals `subtotal` within 0.01
 - `sum(vat_amounts)` equals `vat_total` within 0.01
 - `subtotal + vat_total` equals `total` within 0.01
+- If `line_items` is empty but `subtotal`, `vat_total` or `total` is non-zero, flag it. The line-item table was missed; this is an extraction failure. The three sum checks above are skipped in that case.
 
 **ZATCA structural**
 - Seller VAT number, when present, is exactly 15 digits
@@ -162,7 +164,8 @@ class FieldConfidence(BaseModel):
 **Confidence gating**
 - Any field below `CONFIDENCE_THRESHOLD` (default 0.80, from env) sets `needs_review = true`
 - Any failed arithmetic check forces `needs_review = true` on the fields involved
-- An invoice with any `needs_review` field returns HTTP 200 with `"status": "needs_review"` — it is not an error, it is a queue
+- Any finding of either severity sets `"status": "needs_review"`. Severity says whether we read the invoice wrong; status says whether a human should look. A warning means the invoice itself is non-compliant and will be rejected at clearance, so the answer is yes for both.
+- An invoice with `"status": "needs_review"` returns HTTP 200 — it is not an error, it is a queue
 
 **Severity mapping**
 

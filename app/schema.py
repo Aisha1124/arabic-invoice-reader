@@ -1,4 +1,4 @@
-from datetime import date
+from datetime import date, datetime
 from decimal import Decimal
 from typing import Annotated, Literal
 
@@ -33,6 +33,7 @@ class LineItem(BaseModel):
 class Invoice(BaseModel):
     invoice_number: str | None = None
     invoice_date: date | None = None
+    invoice_timestamp: datetime | None = None
     invoice_type: Literal["standard", "simplified", "unknown"]
     seller_name: str | None = None
     seller_vat_number: str | None = None
