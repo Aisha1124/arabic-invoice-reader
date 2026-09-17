@@ -249,3 +249,9 @@ If any of these fail, say which one and why. Do not report success.
 Say so directly. State what you tried, what happened, and what you need.
 
 Never: silently simplify the task, fake a result, stub something and describe it as working, or continue past an error hoping it resolves later.
+
+---
+
+## 14. Known limitations
+
+- `invoice_date_matches_timestamp` compares against the UTC date. A real Saudi invoice stamped `+03:00` between 00:00 and 03:00 local falls on the previous UTC day and would be flagged incorrectly. The eval set is all Z-suffixed so this does not affect our numbers. Fixing it requires knowing the invoice's local timezone, which is not on the schema.
