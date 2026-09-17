@@ -1,6 +1,8 @@
 from datetime import UTC, date, datetime, timedelta, timezone
 from decimal import Decimal
 
+import pytest
+
 from app.schema import ExtractionResult, Finding, Invoice, LineItem
 from app.validate import validate
 
@@ -311,6 +313,33 @@ def test_seller_vat_with_non_ascii_digits_is_warning() -> None:
     assert len(_by_rule(result, "seller_vat_number_is_15_digits")) == 1
 
 
+# --- ZATCA: seller VAT number present on every invoice type --------------------
+
+
+def test_present_seller_vat_passes() -> None:
+    result = _run(_invoice(seller_vat_number=SELLER_VAT))
+
+    assert _by_rule(result, "seller_vat_number_present") == []
+
+
+@pytest.mark.parametrize("invoice_type", ["standard", "simplified", "unknown"])
+def test_missing_seller_vat_is_warning_on_every_invoice_type(
+    invoice_type: str,
+) -> None:
+    result = _run(_invoice(invoice_type=invoice_type, seller_vat_number=None))
+
+    [finding] = _by_rule(result, "seller_vat_number_present")
+    assert finding.severity == "warning"
+    assert finding.fields == ["seller_vat_number"]
+    assert _by_rule(result, "seller_vat_number_is_15_digits") == []
+
+
+def test_empty_string_seller_vat_is_warning() -> None:
+    result = _run(_invoice(seller_vat_number=""))
+
+    assert len(_by_rule(result, "seller_vat_number_present")) == 1
+
+
 # --- ZATCA: standard invoice has buyer VAT ------------------------------------
 
 
@@ -377,6 +406,35 @@ def test_lines_with_zero_vat_but_positive_vat_total_is_warning() -> None:
     ]
 
 
+def test_correctly_extracted_lumped_vat_invoice_yields_only_the_warning() -> None:
+    lines = [_line("1", "100.00", vat_amount="0"), _line("1", "50.00", vat_amount="0")]
+
+    result = _run(
+        _invoice(lines, vat_total=Decimal("22.50"), total=Decimal("172.50")),
+        {"line_items[0].vat_amount": 0.99, "vat_total": 0.99},
+    )
+
+    [finding] = result.findings
+    assert finding.rule == "vat_is_itemised_per_line"
+    assert finding.severity == "warning"
+    assert result.status == "needs_review"
+    # A warning queues the invoice but does not force needs_review on fields.
+    assert not any(c.needs_review for c in result.confidences)
+
+
+def test_lumped_vat_does_not_skip_line_total_arithmetic() -> None:
+    lines = [
+        _line("1", "100.00", vat_amount="0", line_total="999.00"),
+        _line("1", "50.00", vat_amount="0"),
+    ]
+
+    result = _run(_invoice(lines, vat_total=Decimal("22.50")))
+
+    assert len(_by_rule(result, "line_total_equals_quantity_times_unit_price")) == 1
+    assert _by_rule(result, "vat_amount_equals_line_total_times_vat_rate") == []
+    assert _by_rule(result, "vat_total_equals_sum_of_vat_amounts") == []
+
+
 def test_every_line_carrying_the_invoice_vat_figure_is_warning() -> None:
     lines = [
         _line("1", "100.00", vat_amount="22.50"),
@@ -424,8 +482,9 @@ def test_simplified_invoice_missing_qr_fields_is_warning() -> None:
 
     [finding] = _by_rule(result, "simplified_invoice_has_qr_fields")
     assert finding.severity == "warning"
-    assert finding.fields == ["seller_vat_number", "invoice_timestamp", "total"]
-    assert "seller_vat_number, invoice_timestamp, total" in finding.message
+    assert finding.fields == ["invoice_timestamp", "total"]
+    assert "invoice_timestamp, total" in finding.message
+    assert len(_by_rule(result, "seller_vat_number_present")) == 1
 
 
 def test_simplified_invoice_with_date_but_no_timestamp_is_warning() -> None:

@@ -741,7 +741,7 @@
     "vat_total": "263.77",
     "total": "2022.21",
     "qr_base64": "ATHYtNix2YPYqSDYp9mE2K7ZhNmK2Kwg2YTZhNmF2LnYr9in2Kog2KfZhNi32KjZitipAg8zODI1MDQ2NDI4Njk1OTMDFDIwMjYtMDUtMjNUMTE6MDg6MDBaBAcyMDIyLjIxBQYyNjMuNzc=",
-    "seeded_defect": "missing_buyer_vat",
+    "seeded_defect": null,
     "numerals": "latin",
     "language": "bilingual",
     "file": "INV-2026-1014.png"

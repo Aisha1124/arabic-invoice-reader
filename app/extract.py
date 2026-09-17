@@ -15,7 +15,7 @@ from app.validate import validate
 
 logger = logging.getLogger(__name__)
 
-PROMPT_VERSION = "v1"
+PROMPT_VERSION = "v2"
 PROMPT = """You are extracting a Saudi tax invoice into structured JSON for ZATCA validation.
 
 The invoice may be in Arabic, English, or both. Arabic text is right-to-left; \
@@ -42,7 +42,8 @@ Return one JSON object with exactly two keys:
   buyer_name: string
   buyer_vat_number: string, 15 digits as printed
   line_items: array of objects with description, quantity, unit_price, line_total, \
-vat_rate (a fraction such as "0.15", not a percentage), vat_amount
+vat_rate (a fraction such as "0.15", not a percentage), vat_amount. \
+If the table has no per-line VAT column, set vat_amount to "0" on every line, not null.
   subtotal: total excluding VAT
   vat_total: total VAT
   total: total including VAT

@@ -43,26 +43,32 @@ State in your README which set each number came from. Do not blend them.
 | With ZATCA TLV QR code | 13 |
 | Arabic-only layout (no English) | 12 |
 | Arabic-Indic numerals (٠١٢٣٤٥٦٧٨٩) | 6 |
-| Seeded defects | 5 |
+| Seeded defects | 4 |
 
 Every sample carries scan-like degradation: slight rotation, blur, or
 contrast shift. None are perfectly clean.
 
 ## Seeded defects
 
-Five invoices contain deliberate ZATCA compliance faults. These exist so your
+Four invoices contain deliberate ZATCA compliance faults. These exist so your
 validation layer has real work to do and you can report a true catch rate.
 
 | File | Defect | Why it matters |
 |---|---|---|
 | INV-2026-1003 | `missing_buyer_vat` | Standard invoice with no buyer TIN. The most frequent cause of clearance rejection. |
-| INV-2026-1014 | `missing_buyer_vat` | Same. |
 | INV-2026-1009 | `lumped_vat` | No per-line VAT breakdown. The second most common rejection cause. |
 | INV-2026-1021 | `lumped_vat` | Same. |
 | INV-2026-1026 | `missing_seller_vat` | No seller TIN at all. |
 
 The `seeded_defect` field in `ground_truth.json` names the fault. Everything else
 is arithmetically consistent.
+
+**Corrected label.** The generator originally seeded `missing_buyer_vat` on
+INV-2026-1014 as well, but that invoice is *simplified*, and a simplified invoice
+does not carry a buyer VAT number: the omission is correct, not a defect. Its
+`seeded_defect` in `ground_truth.json` has been set to `null` by hand.
+`generate_invoices.py` still seeds index 14, so regenerating the set reintroduces
+the wrong label; re-apply the correction if you regenerate.
 
 ## Verified properties
 

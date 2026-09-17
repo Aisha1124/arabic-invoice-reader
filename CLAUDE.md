@@ -154,13 +154,15 @@ class FieldConfidence(BaseModel):
 - `sum(vat_amounts)` equals `vat_total` within 0.01
 - `subtotal + vat_total` equals `total` within 0.01
 - If `line_items` is empty but `subtotal`, `vat_total` or `total` is non-zero, flag it. The line-item table was missed; this is an extraction failure. The three sum checks above are skipped in that case.
+- If every line has `vat_amount == 0` and `vat_total > 0`, the invoice is lumped-VAT. That is a document defect, not a misread, so the two per-line VAT checks (`line_total * vat_rate` and `sum(vat_amounts)`) are skipped and `vat_is_itemised_per_line` carries the finding as a warning.
 - If both `invoice_date` and `invoice_timestamp` are present, the UTC date of the timestamp must equal `invoice_date`. Both come from the same document, so a mismatch means one was misread. Timezones are deliberately not handled.
 
 **ZATCA structural**
-- Seller VAT number, when present, is exactly 15 digits
+- Seller VAT number must be present on every invoice type; ZATCA requires it on standard and simplified invoices alike. Missing → `seller_vat_number_present`, warning.
+- Seller VAT number, when present, is exactly 15 digits. Separate rule from presence.
 - If `invoice_type == "standard"`, a missing `buyer_vat_number` is flagged. This is the most common real-world clearance rejection.
 - If every line shares one lumped VAT figure rather than per-line VAT, flag it. This is the second most common rejection.
-- Simplified invoices: seller name, seller VAT number, timestamp, total, and VAT amount must all be present. These are the five TLV QR fields.
+- Simplified invoices: seller name, timestamp, total, and VAT amount must all be present. With the seller VAT number above, these are the five TLV QR fields.
 
 **Confidence gating**
 - Any field below `CONFIDENCE_THRESHOLD` (default 0.80, from env) sets `needs_review = true`
@@ -256,5 +258,4 @@ Never: silently simplify the task, fake a result, stub something and describe it
 
 - `invoice_date_matches_timestamp` compares against the UTC date. A real Saudi invoice stamped `+03:00` between 00:00 and 03:00 local falls on the previous UTC day and would be flagged incorrectly. The eval set is all Z-suffixed so this does not affect our numbers. Fixing it requires knowing the invoice's local timezone, which is not on the schema.
 - Line-item descriptions are scored against `description_ar`. The generator renders only the Arabic description in the table, on bilingual invoices too, so `description_en` never appears on the page. `eval/load_data.py` drops it deliberately.
-- Lumped-VAT invoices have no per-line VAT, but `LineItem.vat_amount` is required. Convention: `0`. `eval/load_data.py` maps the empty ground-truth value to `0`, and `validate.py` treats all-zero line VAT with a non-zero `vat_total` as lumped. Two consequences, both unresolved: prompt v1 does not tell the model to emit `0` when there is no VAT column, so it may return `null` and fail the schema; and the per-line arithmetic checks still fire as `error` on those lines, so on a lumped-VAT invoice a correct extraction is reported as an arithmetic failure.
-- Two seeded defects are invisible to the current rules. `INV-2026-1014` (`missing_buyer_vat`) is a simplified invoice, and section 7 only requires a buyer VAT on standard invoices. `INV-2026-1026` (`missing_seller_vat`) is a standard invoice, and section 7 only checks seller VAT format when present and presence only on simplified invoices. Catch rate on the seeded set is therefore at most 3 of 5 until a rule is added or the eval notes it.
+- Lumped-VAT invoices have no per-line VAT, but `LineItem.vat_amount` is required. Convention: `0`. Prompt v2 instructs the model to emit `"0"`, `eval/load_data.py` maps the empty ground-truth value to `0`, and `validate.py` treats all-zero line VAT with a non-zero `vat_total` as lumped.

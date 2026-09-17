@@ -7,13 +7,9 @@ from app.schema import ExtractionResult, FieldConfidence, Finding, Invoice, Line
 TOLERANCE = Decimal("0.01")
 # ASCII digits only: `\d` and str.isdigit() also accept Arabic-Indic digits.
 SELLER_VAT_PATTERN = re.compile(r"[0-9]{15}")
-SIMPLIFIED_QR_FIELDS = (
-    "seller_name",
-    "seller_vat_number",
-    "invoice_timestamp",
-    "total",
-    "vat_total",
-)
+# Seller VAT is the fifth TLV field; it is required on every invoice type, so
+# seller_vat_number_present covers it rather than this simplified-only check.
+SIMPLIFIED_QR_FIELDS = ("seller_name", "invoice_timestamp", "total", "vat_total")
 
 
 def _within_tolerance(expected: Decimal, actual: Decimal) -> bool:
@@ -24,7 +20,20 @@ def _is_missing(value: object) -> bool:
     return value is None or value == ""
 
 
-def _check_line_arithmetic(index: int, line: LineItem) -> list[Finding]:
+def _is_lumped_vat(invoice: Invoice) -> bool:
+    """No per-line VAT on the page: a document defect, not a misread, so the
+    per-line VAT arithmetic is skipped and vat_is_itemised_per_line reports it."""
+    return (
+        bool(invoice.line_items)
+        and all(line.vat_amount == 0 for line in invoice.line_items)
+        and invoice.vat_total is not None
+        and invoice.vat_total > 0
+    )
+
+
+def _check_line_arithmetic(
+    index: int, line: LineItem, check_vat: bool
+) -> list[Finding]:
     prefix = f"line_items[{index}]"
     findings: list[Finding] = []
     expected_total = line.quantity * line.unit_price
@@ -44,6 +53,8 @@ def _check_line_arithmetic(index: int, line: LineItem) -> list[Finding]:
                 ],
             )
         )
+    if not check_vat:
+        return findings
     expected_vat = line.line_total * line.vat_rate
     if not _within_tolerance(expected_vat, line.vat_amount):
         findings.append(
@@ -64,7 +75,7 @@ def _check_line_arithmetic(index: int, line: LineItem) -> list[Finding]:
     return findings
 
 
-def _check_sums_against_lines(invoice: Invoice) -> list[Finding]:
+def _check_sums_against_lines(invoice: Invoice, check_vat: bool) -> list[Finding]:
     if not invoice.line_items:
         return []
     line_fields = [f"line_items[{i}]" for i in range(len(invoice.line_items))]
@@ -84,6 +95,8 @@ def _check_sums_against_lines(invoice: Invoice) -> list[Finding]:
                 fields=["subtotal", *(f"{f}.line_total" for f in line_fields)],
             )
         )
+    if not check_vat:
+        return findings
     vat_sum = sum((line.vat_amount for line in invoice.line_items), Decimal(0))
     if invoice.vat_total is not None and not _within_tolerance(
         vat_sum, invoice.vat_total
@@ -164,6 +177,20 @@ def _check_grand_total(invoice: Invoice) -> Finding | None:
     )
 
 
+def _check_seller_vat_present(invoice: Invoice) -> Finding | None:
+    if not _is_missing(invoice.seller_vat_number):
+        return None
+    return Finding(
+        rule="seller_vat_number_present",
+        severity="warning",
+        message=(
+            "seller_vat_number is missing; ZATCA requires it on standard and"
+            " simplified invoices alike"
+        ),
+        fields=["seller_vat_number"],
+    )
+
+
 def _check_seller_vat_format(invoice: Invoice) -> Finding | None:
     vat = invoice.seller_vat_number
     if _is_missing(vat) or SELLER_VAT_PATTERN.fullmatch(vat):
@@ -198,8 +225,7 @@ def _check_per_line_vat(invoice: Invoice) -> Finding | None:
     if not lines:
         return None
     vat_fields = [f"line_items[{i}].vat_amount" for i in range(len(lines))]
-    all_zero = all(line.vat_amount == 0 for line in lines)
-    if all_zero and invoice.vat_total is not None and invoice.vat_total > 0:
+    if _is_lumped_vat(invoice):
         return Finding(
             rule="vat_is_itemised_per_line",
             severity="warning",
@@ -282,13 +308,15 @@ def validate(
     itself is non-compliant, and a human must still see that.
     """
     findings: list[Finding] = []
+    check_vat = not _is_lumped_vat(invoice)
     for index, line in enumerate(invoice.line_items):
-        findings.extend(_check_line_arithmetic(index, line))
-    findings.extend(_check_sums_against_lines(invoice))
+        findings.extend(_check_line_arithmetic(index, line, check_vat))
+    findings.extend(_check_sums_against_lines(invoice, check_vat))
     whole_invoice = (
         _check_totals_have_line_items(invoice),
         _check_grand_total(invoice),
         _check_date_matches_timestamp(invoice),
+        _check_seller_vat_present(invoice),
         _check_seller_vat_format(invoice),
         _check_buyer_vat_present(invoice),
         _check_per_line_vat(invoice),

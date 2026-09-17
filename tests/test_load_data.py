@@ -147,9 +147,15 @@ def test_real_set_matches_readme_composition() -> None:
     assert sum(s.invoice.invoice_type == "standard" for s in samples) == 17
     assert sum(s.meta.language == "arabic_only" for s in samples) == 12
     assert sum(s.meta.numerals == "arabic_indic" for s in samples) == 6
-    assert sum(s.meta.seeded_defect is not None for s in samples) == 5
-    # Ground truth without a seeded defect must be arithmetically clean at our tolerance.
+    assert sum(s.meta.seeded_defect is not None for s in samples) == 4
+    # Ground truth without a seeded defect must validate clean; every seeded
+    # defect must be caught by exactly the rule that names it, and nothing else.
+    expected_rule = {
+        "missing_buyer_vat": "standard_invoice_has_buyer_vat_number",
+        "lumped_vat": "vat_is_itemised_per_line",
+        "missing_seller_vat": "seller_vat_number_present",
+    }
     for sample in samples:
-        if sample.meta.seeded_defect is None:
-            result = validate(sample.invoice, {}, 0.8)
-            assert result.findings == [], sample.meta.file
+        rules = [f.rule for f in validate(sample.invoice, {}, 0.8).findings]
+        defect = sample.meta.seeded_defect
+        assert rules == ([expected_rule[defect]] if defect else []), sample.meta.file
