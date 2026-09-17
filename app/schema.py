@@ -64,3 +64,13 @@ class ExtractionResult(BaseModel):
     confidences: list[FieldConfidence]
     findings: list[Finding]
     status: Literal["ok", "needs_review"]
+
+
+class CallMetadata(BaseModel):
+    model: str
+    prompt_version: str
+    latency_ms: int
+    prompt_tokens: int
+    completion_tokens: int
+    estimated_cost_usd: Decimal | None
+    cache_hit: bool

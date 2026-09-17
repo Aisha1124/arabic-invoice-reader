@@ -255,3 +255,4 @@ Never: silently simplify the task, fake a result, stub something and describe it
 ## 14. Known limitations
 
 - `invoice_date_matches_timestamp` compares against the UTC date. A real Saudi invoice stamped `+03:00` between 00:00 and 03:00 local falls on the previous UTC day and would be flagged incorrectly. The eval set is all Z-suffixed so this does not affect our numbers. Fixing it requires knowing the invoice's local timezone, which is not on the schema.
+- `eval/ground_truth.json` has `description_ar` and `description_en` per line item, but the schema has a single `description`. `eval/load_data.py` must decide which one (or what combination) the extractor's output is scored against. Not decided yet.

@@ -67,7 +67,7 @@ def env(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
 
 def test_extract_english_fixture_is_clean() -> None:
     client = FakeClient()
-    result = extract.extract(PNG, client=client)
+    result, _ = extract.extract(PNG, client=client)
 
     assert result.status == "ok"
     assert result.findings == []
@@ -102,9 +102,45 @@ def test_second_call_is_served_from_cache() -> None:
         def __getattr__(self, name: str) -> object:
             raise AssertionError("API must not be called on a cache hit")
 
-    again = extract.extract(PNG, client=Exploding())
+    again, metadata = extract.extract(PNG, client=Exploding())
     assert again.invoice.total == Decimal("43113.56")
     assert len(client.completions.calls) == 1
+    assert metadata.cache_hit is True
+
+
+def test_metadata_on_miss_and_hit() -> None:
+    _, miss = extract.extract(PNG, client=FakeClient())
+    assert miss.cache_hit is False
+    assert miss.model == MODEL
+    assert miss.prompt_version == PROMPT_VERSION
+    assert miss.prompt_tokens == 1200
+    assert miss.completion_tokens == 300
+    assert miss.latency_ms >= 0
+    assert miss.estimated_cost_usd is None
+
+    _, hit = extract.extract(PNG, client=FakeClient())
+    assert hit.cache_hit is True
+    assert (hit.latency_ms, hit.prompt_tokens, hit.completion_tokens) == (
+        miss.latency_ms,
+        miss.prompt_tokens,
+        miss.completion_tokens,
+    )
+
+
+def test_usage_is_cached_with_response() -> None:
+    _, metadata = extract.extract(PNG, client=FakeClient())
+    record = cache.get(PNG, MODEL, PROMPT_VERSION)
+    assert record is not None
+    assert record["content"] == ENGLISH
+    assert record["prompt_tokens"] == 1200
+    assert record["completion_tokens"] == 300
+    assert record["latency_ms"] == metadata.latency_ms
+
+
+def test_malformed_cached_record_raises() -> None:
+    cache.set(PNG, MODEL, PROMPT_VERSION, {"content": ENGLISH})
+    with pytest.raises(RuntimeError, match="cached response record is malformed"):
+        extract.extract(PNG, client=FakeClient())
 
 
 def test_cache_key_includes_model_and_prompt_version(
@@ -120,7 +156,7 @@ def test_cache_key_includes_model_and_prompt_version(
 
 
 def test_arabic_indic_numerals_are_normalised() -> None:
-    result = extract.extract(PNG, client=FakeClient(ARABIC_INDIC))
+    result, _ = extract.extract(PNG, client=FakeClient(ARABIC_INDIC))
     invoice = result.invoice
 
     assert invoice.invoice_number == "INV-2026-1002"
@@ -130,13 +166,28 @@ def test_arabic_indic_numerals_are_normalised() -> None:
     assert invoice.line_items[0].vat_rate == Decimal("0.15")
     assert invoice.subtotal == Decimal("37416.33")
     assert invoice.total == Decimal("43028.78")
-    assert invoice.line_items[0].description == "استشارة هندسية 3"
     assert result.status == "ok", [f.message for f in result.findings]
 
 
-def test_normalise_digits_leaves_non_strings_alone() -> None:
-    assert normalise_digits({"a": ["١", 2, None, Decimal(3)]}) == {
-        "a": ["1", 2, None, Decimal(3)]
+def test_free_text_fields_keep_arabic_indic_digits() -> None:
+    result, _ = extract.extract(PNG, client=FakeClient(ARABIC_INDIC))
+    assert result.invoice.line_items[0].description == "استشارة هندسية ٣"
+    assert result.invoice.seller_name == "شركة الخليج للمعدات الطبية"
+
+
+def test_normalise_digits_touches_numeric_fields_only() -> None:
+    assert normalise_digits(
+        {
+            "seller_name": "متجر ٣",
+            "total": "١٬٠٠٠٫٥٠",
+            "subtotal": None,
+            "line_items": [{"description": "صنف ٧", "quantity": "٢"}, "junk"],
+        }
+    ) == {
+        "seller_name": "متجر ٣",
+        "total": "1,000.50",
+        "subtotal": None,
+        "line_items": [{"description": "صنف ٧", "quantity": "2"}, "junk"],
     }
 
 
@@ -152,7 +203,7 @@ def test_json_numbers_are_parsed_as_decimal() -> None:
 def test_low_confidence_marks_field_for_review() -> None:
     payload = json.loads(ENGLISH)
     payload["confidence"]["seller_vat_number"] = 0.5
-    result = extract.extract(PNG, client=FakeClient(json.dumps(payload)))
+    result, _ = extract.extract(PNG, client=FakeClient(json.dumps(payload)))
 
     assert result.status == "needs_review"
     (finding,) = result.findings
@@ -187,6 +238,7 @@ MINIMAL_INVOICE = '{"invoice": {"invoice_type": "standard", "line_items": []}, '
     [
         ("{not json", "not valid JSON"),
         ('{"invoice": {}}', "keys 'invoice' and 'confidence'"),
+        ('{"invoice": [], "confidence": {}}', "'invoice' must be an object"),
         (
             '{"invoice": {"invoice_type": "standard"}, "confidence": {}}',
             "Invoice schema",
@@ -220,6 +272,7 @@ def test_malformed_response_is_still_cached() -> None:
 def test_usage_logged_without_prices(caplog: pytest.LogCaptureFixture) -> None:
     with caplog.at_level(logging.INFO, logger="app.extract"):
         extract.extract(PNG, client=FakeClient())
+    assert "cache_hit=False" in caplog.text
     assert "prompt_tokens=1200 completion_tokens=300" in caplog.text
     assert "estimated_cost=unknown" in caplog.text
 
@@ -230,6 +283,7 @@ def test_usage_logged_with_prices(
     monkeypatch.setenv("OPENAI_PRICE_INPUT_PER_1M_USD", "2.50")
     monkeypatch.setenv("OPENAI_PRICE_OUTPUT_PER_1M_USD", "10.00")
     with caplog.at_level(logging.INFO, logger="app.extract"):
-        extract.extract(PNG, client=FakeClient())
+        _, metadata = extract.extract(PNG, client=FakeClient())
     # 1200 * 2.50 / 1e6 + 300 * 10.00 / 1e6
+    assert metadata.estimated_cost_usd == Decimal("0.006")
     assert "estimated_cost=$0.006000" in caplog.text

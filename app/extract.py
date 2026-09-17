@@ -2,6 +2,7 @@ import base64
 import json
 import logging
 import os
+import time
 from decimal import Decimal, InvalidOperation
 from typing import Any
 
@@ -9,7 +10,7 @@ from openai import OpenAI
 from pydantic import ValidationError
 
 from app import cache
-from app.schema import ExtractionResult, Invoice
+from app.schema import CallMetadata, ExtractionResult, Invoice
 from app.validate import validate
 
 logger = logging.getLogger(__name__)
@@ -54,6 +55,24 @@ and every line item field as line_items[i].field, for example "line_items[0].vat
 Include fields you set to null."""
 
 ARABIC_INDIC = str.maketrans("٠١٢٣٤٥٦٧٨٩۰۱۲۳۴۵۶۷۸۹٫٬", "01234567890123456789.,")
+# Free text (description, names) is left verbatim: changing its digits alters content.
+NUMERIC_FIELDS = frozenset(
+    {
+        "invoice_number",
+        "invoice_date",
+        "invoice_timestamp",
+        "seller_vat_number",
+        "buyer_vat_number",
+        "quantity",
+        "unit_price",
+        "line_total",
+        "vat_rate",
+        "vat_amount",
+        "subtotal",
+        "vat_total",
+        "total",
+    }
+)
 PRICE_ENV = ("OPENAI_PRICE_INPUT_PER_1M_USD", "OPENAI_PRICE_OUTPUT_PER_1M_USD")
 
 
@@ -120,6 +139,7 @@ def _estimated_cost_usd(prompt_tokens: int, completion_tokens: int) -> Decimal |
 
 
 def _call_model(client: OpenAI, model: str, image_bytes: bytes) -> dict[str, Any]:
+    started = time.perf_counter()
     response = client.chat.completions.create(
         model=model,
         response_format={"type": "json_object"},
@@ -136,6 +156,7 @@ def _call_model(client: OpenAI, model: str, image_bytes: bytes) -> dict[str, Any
             }
         ],
     )
+    latency_ms = round((time.perf_counter() - started) * 1000)
     content = response.choices[0].message.content
     if content is None:
         raise ParseError("model returned no message content", raw="")
@@ -144,34 +165,64 @@ def _call_model(client: OpenAI, model: str, image_bytes: bytes) -> dict[str, Any
         "content": content,
         "prompt_tokens": usage.prompt_tokens if usage else 0,
         "completion_tokens": usage.completion_tokens if usage else 0,
+        "latency_ms": latency_ms,
     }
 
 
-def _log_usage(model: str, prompt_tokens: int, completion_tokens: int) -> None:
+def _metadata(model: str, record: dict[str, Any], cache_hit: bool) -> CallMetadata:
+    """
+    On a cache hit the tokens, latency and cost describe the call that produced the
+    cached answer; `cache_hit` says nothing was spent this time.
+    """
+    try:
+        latency_ms = int(record["latency_ms"])
+        prompt_tokens = int(record["prompt_tokens"])
+        completion_tokens = int(record["completion_tokens"])
+    except (KeyError, TypeError, ValueError) as exc:
+        raise RuntimeError(
+            f"cached response record is malformed ({exc!r}); delete it from"
+            f" {cache.CACHE_DIR} to re-extract"
+        ) from exc
     cost = _estimated_cost_usd(prompt_tokens, completion_tokens)
-    cost_text = (
-        f"${cost:.6f}"
-        if cost is not None
-        else f"unknown (set {' and '.join(PRICE_ENV)})"
-    )
     logger.info(
-        "model=%s prompt_tokens=%d completion_tokens=%d estimated_cost=%s",
+        "model=%s cache_hit=%s latency_ms=%d prompt_tokens=%d completion_tokens=%d"
+        " estimated_cost=%s",
         model,
+        cache_hit,
+        latency_ms,
         prompt_tokens,
         completion_tokens,
-        cost_text,
+        f"${cost:.6f}"
+        if cost is not None
+        else f"unknown (set {' and '.join(PRICE_ENV)})",
+    )
+    return CallMetadata(
+        model=model,
+        prompt_version=PROMPT_VERSION,
+        latency_ms=latency_ms,
+        prompt_tokens=prompt_tokens,
+        completion_tokens=completion_tokens,
+        estimated_cost_usd=cost,
+        cache_hit=cache_hit,
     )
 
 
-def normalise_digits(value: Any) -> Any:
-    """Recursively map Arabic-Indic digits and separators to ASCII in every string."""
-    if isinstance(value, str):
-        return value.translate(ARABIC_INDIC)
-    if isinstance(value, list):
-        return [normalise_digits(v) for v in value]
-    if isinstance(value, dict):
-        return {k: normalise_digits(v) for k, v in value.items()}
-    return value
+def normalise_digits(invoice: dict[str, Any]) -> dict[str, Any]:
+    """Map Arabic-Indic digits and separators to ASCII in NUMERIC_FIELDS only."""
+
+    def fix(key: str, value: Any) -> Any:
+        if key in NUMERIC_FIELDS and isinstance(value, str):
+            return value.translate(ARABIC_INDIC)
+        if key == "line_items" and isinstance(value, list):
+            return [
+                {k: fix(k, v) for k, v in line.items()}
+                if isinstance(line, dict)
+                else line
+                for line in value
+            ]
+        return value
+
+    return {k: fix(k, v) for k, v in invoice.items()}
 
 
 def _parse_confidences(raw: Any, content: str) -> dict[str, float]:
@@ -210,9 +261,14 @@ def parse_response(content: str) -> tuple[Invoice, dict[str, float]]:
             f" received {sorted(payload) if isinstance(payload, dict) else payload!r}",
             raw=content,
         )
-    payload = normalise_digits(payload)
+    raw_invoice = payload["invoice"]
+    if not isinstance(raw_invoice, dict):
+        raise ParseError(
+            f"'invoice' must be an object, received {type(raw_invoice).__name__}",
+            raw=content,
+        )
     try:
-        invoice = Invoice.model_validate(payload["invoice"])
+        invoice = Invoice.model_validate(normalise_digits(raw_invoice))
     except ValidationError as exc:
         raise ParseError(
             f"model response does not match the Invoice schema: {exc}", raw=content
@@ -220,19 +276,20 @@ def parse_response(content: str) -> tuple[Invoice, dict[str, float]]:
     return invoice, _parse_confidences(payload["confidence"], content)
 
 
-def extract(image_bytes: bytes, client: OpenAI | None = None) -> ExtractionResult:
+def extract(
+    image_bytes: bytes, client: OpenAI | None = None
+) -> tuple[ExtractionResult, CallMetadata]:
     """
     `client` is only constructed on a cache miss, so cached images need no API key.
     Responses are cached before parsing: a malformed answer is still a paid answer,
     and re-running must not silently spend again (delete the cache file to retry).
     """
     model = model_name()
-    response = cache.get(image_bytes, model, PROMPT_VERSION)
-    if response is None:
-        response = _call_model(client or OpenAI(), model, image_bytes)
-        cache.set(image_bytes, model, PROMPT_VERSION, response)
-        _log_usage(model, response["prompt_tokens"], response["completion_tokens"])
-    else:
-        logger.info("model=%s cache hit, no API call", model)
-    invoice, confidences = parse_response(response["content"])
-    return validate(invoice, confidences, _confidence_threshold())
+    record = cache.get(image_bytes, model, PROMPT_VERSION)
+    cache_hit = record is not None
+    if record is None:
+        record = _call_model(client or OpenAI(), model, image_bytes)
+        cache.set(image_bytes, model, PROMPT_VERSION, record)
+    metadata = _metadata(model, record, cache_hit)
+    invoice, confidences = parse_response(record["content"])
+    return validate(invoice, confidences, _confidence_threshold()), metadata
