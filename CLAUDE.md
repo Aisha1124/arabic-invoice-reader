@@ -154,6 +154,7 @@ class FieldConfidence(BaseModel):
 - `sum(vat_amounts)` equals `vat_total` within 0.01
 - `subtotal + vat_total` equals `total` within 0.01
 - If `line_items` is empty but `subtotal`, `vat_total` or `total` is non-zero, flag it. The line-item table was missed; this is an extraction failure. The three sum checks above are skipped in that case.
+- If both `invoice_date` and `invoice_timestamp` are present, the UTC date of the timestamp must equal `invoice_date`. Both come from the same document, so a mismatch means one was misread. Timezones are deliberately not handled.
 
 **ZATCA structural**
 - Seller VAT number, when present, is exactly 15 digits

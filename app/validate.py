@@ -1,4 +1,5 @@
 import re
+from datetime import UTC
 from decimal import Decimal
 
 from app.schema import ExtractionResult, FieldConfidence, Finding, Invoice, LineItem
@@ -119,6 +120,30 @@ def _check_totals_have_line_items(invoice: Invoice) -> Finding | None:
             f" ({', '.join(present)}); the line-item table was missed"
         ),
         fields=["line_items", *present],
+    )
+
+
+def _check_date_matches_timestamp(invoice: Invoice) -> Finding | None:
+    """
+    Compares invoice_date with the UTC date of invoice_timestamp. A non-UTC
+    timestamp near midnight can legitimately differ by a day; we choose not to
+    handle timezones here. A naive timestamp is compared as-is.
+    """
+    if invoice.invoice_date is None or invoice.invoice_timestamp is None:
+        return None
+    timestamp = invoice.invoice_timestamp
+    if timestamp.tzinfo is not None:
+        timestamp = timestamp.astimezone(UTC)
+    if timestamp.date() == invoice.invoice_date:
+        return None
+    return Finding(
+        rule="invoice_date_matches_timestamp",
+        severity="error",
+        message=(
+            f"invoice_date is {invoice.invoice_date} but invoice_timestamp"
+            f" {invoice.invoice_timestamp.isoformat()} falls on {timestamp.date()} UTC"
+        ),
+        fields=["invoice_date", "invoice_timestamp"],
     )
 
 
@@ -263,6 +288,7 @@ def validate(
     whole_invoice = (
         _check_totals_have_line_items(invoice),
         _check_grand_total(invoice),
+        _check_date_matches_timestamp(invoice),
         _check_seller_vat_format(invoice),
         _check_buyer_vat_present(invoice),
         _check_per_line_vat(invoice),

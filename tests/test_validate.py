@@ -1,4 +1,4 @@
-from datetime import UTC, date, datetime
+from datetime import UTC, date, datetime, timedelta, timezone
 from decimal import Decimal
 
 from app.schema import ExtractionResult, Finding, Invoice, LineItem
@@ -204,6 +204,57 @@ def test_no_line_items_with_non_zero_totals_is_error() -> None:
     assert finding.severity == "error"
     assert finding.fields == ["line_items", "subtotal", "total"]
     assert "subtotal, total" in finding.message
+    assert result.status == "needs_review"
+
+
+# --- arithmetic: invoice_date agrees with invoice_timestamp -------------------
+
+
+def test_date_matching_timestamp_passes() -> None:
+    result = _run(_invoice())
+
+    assert _by_rule(result, "invoice_date_matches_timestamp") == []
+
+
+def test_date_check_skipped_when_either_is_missing() -> None:
+    without_date = _run(_invoice(invoice_date=None))
+    without_timestamp = _run(_invoice(invoice_timestamp=None))
+
+    assert _by_rule(without_date, "invoice_date_matches_timestamp") == []
+    assert _by_rule(without_timestamp, "invoice_date_matches_timestamp") == []
+
+
+def test_date_compared_against_utc_date_of_offset_timestamp() -> None:
+    # 01:00 at UTC+3 is 22:00 the previous day in UTC.
+    riyadh = timezone(timedelta(hours=3))
+    timestamp = datetime(2026, 1, 16, 1, 0, tzinfo=riyadh)
+
+    same_utc_day = _run(
+        _invoice(invoice_date=date(2026, 1, 15), invoice_timestamp=timestamp)
+    )
+    local_day = _run(
+        _invoice(invoice_date=date(2026, 1, 16), invoice_timestamp=timestamp)
+    )
+
+    assert _by_rule(same_utc_day, "invoice_date_matches_timestamp") == []
+    assert len(_by_rule(local_day, "invoice_date_matches_timestamp")) == 1
+
+
+def test_naive_timestamp_is_compared_as_is() -> None:
+    naive = datetime(2026, 1, 15, 23, 59)  # noqa: DTZ001 - naive on purpose
+    result = _run(_invoice(invoice_timestamp=naive))
+
+    assert _by_rule(result, "invoice_date_matches_timestamp") == []
+
+
+def test_date_differing_from_timestamp_is_error() -> None:
+    result = _run(_invoice(invoice_date=date(2026, 1, 14)))
+
+    [finding] = _by_rule(result, "invoice_date_matches_timestamp")
+    assert finding.severity == "error"
+    assert finding.fields == ["invoice_date", "invoice_timestamp"]
+    assert "2026-01-14" in finding.message
+    assert "2026-01-15" in finding.message
     assert result.status == "needs_review"
 
 
