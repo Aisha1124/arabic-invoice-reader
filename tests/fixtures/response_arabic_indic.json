@@ -1,0 +1,46 @@
+{
+  "invoice": {
+    "invoice_number": "INV-٢٠٢٦-١٠٠٢",
+    "invoice_date": "٢٠٢٦-٠٧-٣١",
+    "invoice_timestamp": "٢٠٢٦-٠٧-٣١T١٥:٣٨:٠٠Z",
+    "invoice_type": "simplified",
+    "seller_name": "شركة الخليج للمعدات الطبية",
+    "seller_vat_number": "٣١٠١٢٢٣٩٣٥٠٠٠٠٣",
+    "buyer_name": null,
+    "buyer_vat_number": null,
+    "line_items": [
+      {
+        "description": "استشارة هندسية ٣",
+        "quantity": "٩",
+        "unit_price": "٤١٥٧٫٣٧",
+        "line_total": "٣٧٤١٦٫٣٣",
+        "vat_rate": "٠٫١٥",
+        "vat_amount": "٥٦١٢٫٤٥"
+      }
+    ],
+    "subtotal": "٣٧٬٤١٦٫٣٣",
+    "vat_total": "٥٬٦١٢٫٤٥",
+    "total": "٤٣٬٠٢٨٫٧٨",
+    "currency": "SAR"
+  },
+  "confidence": {
+    "invoice_number": 0.9,
+    "invoice_date": 0.9,
+    "invoice_timestamp": 0.9,
+    "invoice_type": 0.9,
+    "seller_name": 0.9,
+    "seller_vat_number": 0.9,
+    "buyer_name": 0.9,
+    "buyer_vat_number": 0.9,
+    "line_items[0].description": 0.9,
+    "line_items[0].quantity": 0.9,
+    "line_items[0].unit_price": 0.9,
+    "line_items[0].line_total": 0.9,
+    "line_items[0].vat_rate": 0.9,
+    "line_items[0].vat_amount": 0.9,
+    "subtotal": 0.9,
+    "vat_total": 0.9,
+    "total": 0.9,
+    "currency": 0.9
+  }
+}

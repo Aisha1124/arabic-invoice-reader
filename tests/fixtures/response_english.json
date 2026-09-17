@@ -1,0 +1,60 @@
+{
+  "invoice": {
+    "invoice_number": "INV-2026-1000",
+    "invoice_date": "2026-07-31",
+    "invoice_timestamp": "2026-07-31T15:38:00Z",
+    "invoice_type": "standard",
+    "seller_name": "Gulf Medical Equipment Co",
+    "seller_vat_number": "315839799889833",
+    "buyer_name": "Al Amanah Trading Est",
+    "buyer_vat_number": "326487668627023",
+    "line_items": [
+      {
+        "description": "Engineering Consultancy",
+        "quantity": "9",
+        "unit_price": "4157.37",
+        "line_total": "37416.33",
+        "vat_rate": "0.15",
+        "vat_amount": "5612.45"
+      },
+      {
+        "description": "Mineral Water - Carton",
+        "quantity": "4",
+        "unit_price": "18.43",
+        "line_total": "73.72",
+        "vat_rate": "0.15",
+        "vat_amount": "11.06"
+      }
+    ],
+    "subtotal": "37490.05",
+    "vat_total": "5623.51",
+    "total": "43113.56",
+    "currency": "SAR"
+  },
+  "confidence": {
+    "invoice_number": 0.99,
+    "invoice_date": 0.98,
+    "invoice_timestamp": 0.95,
+    "invoice_type": 0.9,
+    "seller_name": 0.97,
+    "seller_vat_number": 0.96,
+    "buyer_name": 0.97,
+    "buyer_vat_number": 0.96,
+    "line_items[0].description": 0.95,
+    "line_items[0].quantity": 0.99,
+    "line_items[0].unit_price": 0.97,
+    "line_items[0].line_total": 0.97,
+    "line_items[0].vat_rate": 0.99,
+    "line_items[0].vat_amount": 0.96,
+    "line_items[1].description": 0.95,
+    "line_items[1].quantity": 0.99,
+    "line_items[1].unit_price": 0.97,
+    "line_items[1].line_total": 0.97,
+    "line_items[1].vat_rate": 0.99,
+    "line_items[1].vat_amount": 0.96,
+    "subtotal": 0.98,
+    "vat_total": 0.98,
+    "total": 0.99,
+    "currency": 1
+  }
+}
