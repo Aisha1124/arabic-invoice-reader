@@ -262,7 +262,7 @@ def num(s: str, style: str) -> str:
 
 def render(inv: Invoice, rng: random.Random, ar_font: Path) -> Image.Image:
     W = 1240
-    H = 720 + len(inv.line_items) * 46
+    H = 754 + len(inv.line_items) * 46   # +34 for the time line
     c = Canvas(W, H)
     R = W - 60          # right margin (Arabic baseline)
     L = 60              # left margin (English)
@@ -304,6 +304,15 @@ def render(inv: Invoice, rng: random.Random, ar_font: Path) -> Image.Image:
     c.ar((R, y), f"التاريخ: {num(inv.invoice_date, inv.numerals)}", 21, font_path=ar_font)
     if bilingual:
         c.en((L, y + 3), f"Date: {inv.invoice_date}", 16)
+    y += 34
+
+    # Real ZATCA invoices print the time as well as the date. The first release of
+    # this set only put the timestamp inside the QR payload, so ground truth
+    # demanded a value that was not on the page.
+    time_hm = inv.invoice_timestamp[11:16]
+    c.ar((R, y), f"الوقت: {num(time_hm, inv.numerals)}", 21, font_path=ar_font)
+    if bilingual:
+        c.en((L, y + 3), f"Time: {time_hm}", 16)
     y += 34
 
     if inv.buyer_name:
