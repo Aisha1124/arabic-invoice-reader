@@ -16,7 +16,7 @@ from app.validate import validate
 
 logger = logging.getLogger(__name__)
 
-PROMPT_VERSION = "v2"
+PROMPT_VERSION = "v3"
 PROMPT = """You are extracting a Saudi tax invoice into structured JSON for ZATCA validation.
 
 The invoice may be in Arabic, English, or both. Arabic text is right-to-left; \
@@ -25,6 +25,13 @@ Arabic sentence, or Latin brand names in Arabic descriptions). Read each value a
 appears on the page, not as its surrounding line direction suggests. Many invoices have \
 no English labels at all: rely on the Arabic labels \
 (رقم الفاتورة, التاريخ, الرقم الضريبي, البائع, المشتري, المجموع, ضريبة القيمة المضافة, الإجمالي).
+
+You are a transcriber, not a reader. Copy text character by character. Do not translate, \
+paraphrase, correct, or substitute a more plausible word. If a word looks misspelled on \
+the page, copy the misspelling. Return text in logical reading order, not visual order: \
+an Arabic line containing Latin tokens must come back in the order a reader speaks it, \
+not left to right across the page. When the invoice prints both Arabic and English for a \
+name or a description, always return the Arabic.
 
 Numbers may be printed in Arabic-Indic digits (٠١٢٣٤٥٦٧٨٩) with the Arabic decimal \
 separator (٫). Transcribe them exactly as printed; do not convert them. Never guess a \
@@ -39,11 +46,12 @@ Return one JSON object with exactly two keys:
 with no timezone suffix (the page does not show one)
   invoice_type: "standard" (tax invoice, buyer VAT number shown), \
 "simplified" (simplified tax invoice, retail), or "unknown"
-  seller_name: string
+  seller_name: string, the Arabic name when one is printed
   seller_vat_number: string, 15 digits as printed
-  buyer_name: string
+  buyer_name: string, the Arabic name when one is printed
   buyer_vat_number: string, 15 digits as printed
-  line_items: array of objects with description, quantity, unit_price, line_total, \
+  line_items: array of objects with description (transcribed exactly, Arabic when \
+printed in both languages), quantity, unit_price, line_total, \
 vat_rate (a fraction such as "0.15", not a percentage), vat_amount. \
 If the table has no per-line VAT column, set vat_amount to "0" on every line, not null.
   subtotal: total excluding VAT
