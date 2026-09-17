@@ -74,3 +74,4 @@ class CallMetadata(BaseModel):
     completion_tokens: int
     estimated_cost_usd: Decimal | None
     cache_hit: bool
+    temperature_zero: bool

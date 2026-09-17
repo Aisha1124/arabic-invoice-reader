@@ -2,7 +2,7 @@
   {
     "invoice_number": "INV-2026-1000",
     "invoice_date": "2026-07-31",
-    "invoice_timestamp": "2026-07-31T15:38:00Z",
+    "invoice_timestamp": "2026-07-31T15:38:00",
     "invoice_type": "standard",
     "seller_name": "شركة الخليج للمعدات الطبية",
     "seller_name_en": "Gulf Medical Equipment Co",
@@ -62,7 +62,7 @@
   {
     "invoice_number": "INV-2026-1001",
     "invoice_date": "2026-05-06",
-    "invoice_timestamp": "2026-05-06T14:23:00Z",
+    "invoice_timestamp": "2026-05-06T14:23:00",
     "invoice_type": "simplified",
     "seller_name": "شركة الرياض للتجارة المحدودة",
     "seller_name_en": "Riyadh Trading Company Ltd",
@@ -104,7 +104,7 @@
   {
     "invoice_number": "INV-2026-1002",
     "invoice_date": "2026-01-31",
-    "invoice_timestamp": "2026-01-31T19:10:00Z",
+    "invoice_timestamp": "2026-01-31T19:10:00",
     "invoice_type": "standard",
     "seller_name": "شركة الخليج للمعدات الطبية",
     "seller_name_en": "Gulf Medical Equipment Co",
@@ -173,7 +173,7 @@
   {
     "invoice_number": "INV-2026-1003",
     "invoice_date": "2026-05-01",
-    "invoice_timestamp": "2026-05-01T18:36:00Z",
+    "invoice_timestamp": "2026-05-01T18:36:00",
     "invoice_type": "standard",
     "seller_name": "مؤسسة النخيل للمقاولات",
     "seller_name_en": "Al Nakheel Contracting Est",
@@ -233,7 +233,7 @@
   {
     "invoice_number": "INV-2026-1004",
     "invoice_date": "2026-08-02",
-    "invoice_timestamp": "2026-08-02T20:46:00Z",
+    "invoice_timestamp": "2026-08-02T20:46:00",
     "invoice_type": "standard",
     "seller_name": "مؤسسة الدمام لقطع الغيار",
     "seller_name_en": "Dammam Spare Parts Est",
@@ -275,7 +275,7 @@
   {
     "invoice_number": "INV-2026-1005",
     "invoice_date": "2026-05-27",
-    "invoice_timestamp": "2026-05-27T08:25:00Z",
+    "invoice_timestamp": "2026-05-27T08:25:00",
     "invoice_type": "simplified",
     "seller_name": "شركة البحر الأحمر للخدمات اللوجستية",
     "seller_name_en": "Red Sea Logistics Co",
@@ -317,7 +317,7 @@
   {
     "invoice_number": "INV-2026-1006",
     "invoice_date": "2026-09-05",
-    "invoice_timestamp": "2026-09-05T18:37:00Z",
+    "invoice_timestamp": "2026-09-05T18:37:00",
     "invoice_type": "standard",
     "seller_name": "مؤسسة الدمام لقطع الغيار",
     "seller_name_en": "Dammam Spare Parts Est",
@@ -377,7 +377,7 @@
   {
     "invoice_number": "INV-2026-1007",
     "invoice_date": "2026-06-14",
-    "invoice_timestamp": "2026-06-14T13:14:00Z",
+    "invoice_timestamp": "2026-06-14T13:14:00",
     "invoice_type": "standard",
     "seller_name": "شركة الخليج للمعدات الطبية",
     "seller_name_en": "Gulf Medical Equipment Co",
@@ -446,7 +446,7 @@
   {
     "invoice_number": "INV-2026-1008",
     "invoice_date": "2026-05-10",
-    "invoice_timestamp": "2026-05-10T12:17:00Z",
+    "invoice_timestamp": "2026-05-10T12:17:00",
     "invoice_type": "simplified",
     "seller_name": "شركة جدة للأغذية",
     "seller_name_en": "Jeddah Foods Company",
@@ -479,7 +479,7 @@
   {
     "invoice_number": "INV-2026-1009",
     "invoice_date": "2026-01-13",
-    "invoice_timestamp": "2026-01-13T16:27:00Z",
+    "invoice_timestamp": "2026-01-13T16:27:00",
     "invoice_type": "standard",
     "seller_name": "مؤسسة النخيل للمقاولات",
     "seller_name_en": "Al Nakheel Contracting Est",
@@ -530,7 +530,7 @@
   {
     "invoice_number": "INV-2026-1010",
     "invoice_date": "2026-01-13",
-    "invoice_timestamp": "2026-01-13T15:22:00Z",
+    "invoice_timestamp": "2026-01-13T15:22:00",
     "invoice_type": "simplified",
     "seller_name": "مؤسسة النخيل للمقاولات",
     "seller_name_en": "Al Nakheel Contracting Est",
@@ -563,7 +563,7 @@
   {
     "invoice_number": "INV-2026-1011",
     "invoice_date": "2026-08-07",
-    "invoice_timestamp": "2026-08-07T17:45:00Z",
+    "invoice_timestamp": "2026-08-07T17:45:00",
     "invoice_type": "standard",
     "seller_name": "شركة الخليج للمعدات الطبية",
     "seller_name_en": "Gulf Medical Equipment Co",
@@ -614,7 +614,7 @@
   {
     "invoice_number": "INV-2026-1012",
     "invoice_date": "2026-01-25",
-    "invoice_timestamp": "2026-01-25T13:55:00Z",
+    "invoice_timestamp": "2026-01-25T13:55:00",
     "invoice_type": "simplified",
     "seller_name": "شركة الخليج للمعدات الطبية",
     "seller_name_en": "Gulf Medical Equipment Co",
@@ -656,7 +656,7 @@
   {
     "invoice_number": "INV-2026-1013",
     "invoice_date": "2026-01-03",
-    "invoice_timestamp": "2026-01-03T15:43:00Z",
+    "invoice_timestamp": "2026-01-03T15:43:00",
     "invoice_type": "simplified",
     "seller_name": "مؤسسة النخيل للمقاولات",
     "seller_name_en": "Al Nakheel Contracting Est",
@@ -707,7 +707,7 @@
   {
     "invoice_number": "INV-2026-1014",
     "invoice_date": "2026-05-23",
-    "invoice_timestamp": "2026-05-23T11:08:00Z",
+    "invoice_timestamp": "2026-05-23T11:08:00",
     "invoice_type": "simplified",
     "seller_name": "شركة الخليج للمعدات الطبية",
     "seller_name_en": "Gulf Medical Equipment Co",
@@ -749,7 +749,7 @@
   {
     "invoice_number": "INV-2026-1015",
     "invoice_date": "2026-03-14",
-    "invoice_timestamp": "2026-03-14T13:42:00Z",
+    "invoice_timestamp": "2026-03-14T13:42:00",
     "invoice_type": "simplified",
     "seller_name": "مؤسسة الدمام لقطع الغيار",
     "seller_name_en": "Dammam Spare Parts Est",
@@ -800,7 +800,7 @@
   {
     "invoice_number": "INV-2026-1016",
     "invoice_date": "2026-05-25",
-    "invoice_timestamp": "2026-05-25T20:39:00Z",
+    "invoice_timestamp": "2026-05-25T20:39:00",
     "invoice_type": "simplified",
     "seller_name": "مؤسسة الدمام لقطع الغيار",
     "seller_name_en": "Dammam Spare Parts Est",
@@ -851,7 +851,7 @@
   {
     "invoice_number": "INV-2026-1017",
     "invoice_date": "2026-06-02",
-    "invoice_timestamp": "2026-06-02T11:20:00Z",
+    "invoice_timestamp": "2026-06-02T11:20:00",
     "invoice_type": "simplified",
     "seller_name": "مؤسسة الفيصلية للتوريدات",
     "seller_name_en": "Al Faisaliah Supplies Est",
@@ -902,7 +902,7 @@
   {
     "invoice_number": "INV-2026-1018",
     "invoice_date": "2026-09-02",
-    "invoice_timestamp": "2026-09-02T20:58:00Z",
+    "invoice_timestamp": "2026-09-02T20:58:00",
     "invoice_type": "standard",
     "seller_name": "مكتبة الحكمة للقرطاسية",
     "seller_name_en": "Al Hikma Stationery",
@@ -962,7 +962,7 @@
   {
     "invoice_number": "INV-2026-1019",
     "invoice_date": "2026-03-20",
-    "invoice_timestamp": "2026-03-20T10:31:00Z",
+    "invoice_timestamp": "2026-03-20T10:31:00",
     "invoice_type": "standard",
     "seller_name": "شركة الخليج للمعدات الطبية",
     "seller_name_en": "Gulf Medical Equipment Co",
@@ -1040,7 +1040,7 @@
   {
     "invoice_number": "INV-2026-1020",
     "invoice_date": "2026-04-09",
-    "invoice_timestamp": "2026-04-09T09:11:00Z",
+    "invoice_timestamp": "2026-04-09T09:11:00",
     "invoice_type": "standard",
     "seller_name": "شركة الرياض للتجارة المحدودة",
     "seller_name_en": "Riyadh Trading Company Ltd",
@@ -1109,7 +1109,7 @@
   {
     "invoice_number": "INV-2026-1021",
     "invoice_date": "2026-02-05",
-    "invoice_timestamp": "2026-02-05T14:31:00Z",
+    "invoice_timestamp": "2026-02-05T14:31:00",
     "invoice_type": "simplified",
     "seller_name": "شركة الخليج للمعدات الطبية",
     "seller_name_en": "Gulf Medical Equipment Co",
@@ -1160,7 +1160,7 @@
   {
     "invoice_number": "INV-2026-1022",
     "invoice_date": "2026-06-11",
-    "invoice_timestamp": "2026-06-11T09:05:00Z",
+    "invoice_timestamp": "2026-06-11T09:05:00",
     "invoice_type": "standard",
     "seller_name": "مؤسسة الفيصلية للتوريدات",
     "seller_name_en": "Al Faisaliah Supplies Est",
@@ -1211,7 +1211,7 @@
   {
     "invoice_number": "INV-2026-1023",
     "invoice_date": "2026-09-01",
-    "invoice_timestamp": "2026-09-01T10:05:00Z",
+    "invoice_timestamp": "2026-09-01T10:05:00",
     "invoice_type": "standard",
     "seller_name": "شركة البحر الأحمر للخدمات اللوجستية",
     "seller_name_en": "Red Sea Logistics Co",
@@ -1271,7 +1271,7 @@
   {
     "invoice_number": "INV-2026-1024",
     "invoice_date": "2026-03-20",
-    "invoice_timestamp": "2026-03-20T20:39:00Z",
+    "invoice_timestamp": "2026-03-20T20:39:00",
     "invoice_type": "simplified",
     "seller_name": "شركة البحر الأحمر للخدمات اللوجستية",
     "seller_name_en": "Red Sea Logistics Co",
@@ -1322,7 +1322,7 @@
   {
     "invoice_number": "INV-2026-1025",
     "invoice_date": "2026-06-16",
-    "invoice_timestamp": "2026-06-16T12:59:00Z",
+    "invoice_timestamp": "2026-06-16T12:59:00",
     "invoice_type": "standard",
     "seller_name": "مؤسسة الفيصلية للتوريدات",
     "seller_name_en": "Al Faisaliah Supplies Est",
@@ -1364,7 +1364,7 @@
   {
     "invoice_number": "INV-2026-1026",
     "invoice_date": "2026-04-21",
-    "invoice_timestamp": "2026-04-21T15:44:00Z",
+    "invoice_timestamp": "2026-04-21T15:44:00",
     "invoice_type": "standard",
     "seller_name": "شركة جدة للأغذية",
     "seller_name_en": "Jeddah Foods Company",
@@ -1433,7 +1433,7 @@
   {
     "invoice_number": "INV-2026-1027",
     "invoice_date": "2026-01-30",
-    "invoice_timestamp": "2026-01-30T20:11:00Z",
+    "invoice_timestamp": "2026-01-30T20:11:00",
     "invoice_type": "simplified",
     "seller_name": "مؤسسة الدمام لقطع الغيار",
     "seller_name_en": "Dammam Spare Parts Est",
@@ -1475,7 +1475,7 @@
   {
     "invoice_number": "INV-2026-1028",
     "invoice_date": "2026-05-02",
-    "invoice_timestamp": "2026-05-02T09:48:00Z",
+    "invoice_timestamp": "2026-05-02T09:48:00",
     "invoice_type": "standard",
     "seller_name": "شركة جدة للأغذية",
     "seller_name_en": "Jeddah Foods Company",
@@ -1553,7 +1553,7 @@
   {
     "invoice_number": "INV-2026-1029",
     "invoice_date": "2026-04-03",
-    "invoice_timestamp": "2026-04-03T11:15:00Z",
+    "invoice_timestamp": "2026-04-03T11:15:00",
     "invoice_type": "standard",
     "seller_name": "مؤسسة الفيصلية للتوريدات",
     "seller_name_en": "Al Faisaliah Supplies Est",

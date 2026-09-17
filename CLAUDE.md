@@ -117,7 +117,7 @@ class LineItem(BaseModel):
 class Invoice(BaseModel):
     invoice_number: str | None
     invoice_date: date | None
-    invoice_timestamp: datetime | None   # ZATCA TLV tag 3; ISO 8601
+    invoice_timestamp: datetime | None   # ZATCA TLV tag 3; naive ISO 8601, as printed
     invoice_type: Literal["standard", "simplified", "unknown"]
     seller_name: str | None
     seller_vat_number: str | None    # 15-digit KSA TIN when present
@@ -155,7 +155,7 @@ class FieldConfidence(BaseModel):
 - `subtotal + vat_total` equals `total` within 0.01
 - If `line_items` is empty but `subtotal`, `vat_total` or `total` is non-zero, flag it. The line-item table was missed; this is an extraction failure. The three sum checks above are skipped in that case.
 - If every line has `vat_amount == 0` and `vat_total > 0`, the invoice is lumped-VAT. That is a document defect, not a misread, so the two per-line VAT checks (`line_total * vat_rate` and `sum(vat_amounts)`) are skipped and `vat_is_itemised_per_line` carries the finding as a warning.
-- If both `invoice_date` and `invoice_timestamp` are present, the UTC date of the timestamp must equal `invoice_date`. Both come from the same document, so a mismatch means one was misread. Timezones are deliberately not handled.
+- If both `invoice_date` and `invoice_timestamp` are present, the timestamp's date must equal `invoice_date`. Both come from the same document, so a mismatch means one was misread. Timestamps are naive wall-clock values: the page shows no zone, so `extract.py` strips any suffix the model appends and the comparison is naive to naive.
 
 **ZATCA structural**
 - Seller VAT number must be present on every invoice type; ZATCA requires it on standard and simplified invoices alike. Missing → `seller_vat_number_present`, warning.
@@ -256,6 +256,6 @@ Never: silently simplify the task, fake a result, stub something and describe it
 
 ## 14. Known limitations
 
-- `invoice_date_matches_timestamp` compares against the UTC date. A real Saudi invoice stamped `+03:00` between 00:00 and 03:00 local falls on the previous UTC day and would be flagged incorrectly. The eval set is all Z-suffixed so this does not affect our numbers. Fixing it requires knowing the invoice's local timezone, which is not on the schema.
 - Line-item descriptions are scored against `description_ar`. The generator renders only the Arabic description in the table, on bilingual invoices too, so `description_en` never appears on the page. `eval/load_data.py` drops it deliberately.
 - Lumped-VAT invoices have no per-line VAT, but `LineItem.vat_amount` is required. Convention: `0`. Prompt v2 instructs the model to emit `"0"`, `eval/load_data.py` maps the empty ground-truth value to `0`, and `validate.py` treats all-zero line VAT with a non-zero `vat_total` as lumped.
+- Model output is not guaranteed to be deterministic. `extract.py` requests `temperature=0` and records in `CallMetadata.temperature_zero` whether the model accepted it, but the same image has produced materially different field errors on consecutive runs. Single-pass eval numbers carry run-to-run variance; `eval/run_eval.py --repeats N` reports per-field agreement across runs alongside accuracy, and any published figure should say which it is.

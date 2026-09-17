@@ -1,10 +1,13 @@
 import json
 import logging
 from dataclasses import dataclass, field
+from datetime import datetime
 from decimal import Decimal
 from pathlib import Path
 
+import httpx2
 import pytest
+from openai import BadRequestError
 
 from app import cache, extract
 from app.extract import PROMPT_VERSION, ParseError, normalise_digits, parse_response
@@ -48,11 +51,29 @@ class _Completions:
         return _Response(choices=[_Choice(message=_Message(content=self.content))])
 
 
+class _RejectsTemperature(_Completions):
+    def create(self, **kwargs: object) -> _Response:
+        if "temperature" in kwargs:
+            self.calls.append(kwargs)
+            request = httpx2.Request(
+                "POST", "https://api.openai.com/v1/chat/completions"
+            )
+            raise BadRequestError(
+                "Unsupported value: 'temperature' does not support 0 with this model.",
+                response=httpx2.Response(400, request=request),
+                body=None,
+            )
+        return super().create(**kwargs)
+
+
 class FakeClient:
     """Stands in for openai.OpenAI; records requests, never touches the network."""
 
-    def __init__(self, content: str | None = ENGLISH) -> None:
-        self.completions = _Completions(content)
+    def __init__(
+        self, content: str | None = ENGLISH, rejects_temperature: bool = False
+    ) -> None:
+        completions = _RejectsTemperature if rejects_temperature else _Completions
+        self.completions = completions(content)
         self.chat = self
 
 
@@ -87,10 +108,64 @@ def test_request_uses_env_model_and_json_mode() -> None:
 
     (call,) = client.completions.calls
     assert call["model"] == MODEL
+    assert call["temperature"] == 0
     assert call["response_format"] == {"type": "json_object"}
     parts = call["messages"][0]["content"]
     assert parts[0]["text"] == extract.PROMPT
     assert parts[1]["image_url"]["url"].startswith("data:image/png;base64,")
+
+
+def test_temperature_rejection_is_retried_once_without_it(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    client = FakeClient(rejects_temperature=True)
+    with caplog.at_level(logging.WARNING, logger="app.extract"):
+        result, metadata = extract.extract(PNG, client=client)
+
+    first, second = client.completions.calls
+    assert first["temperature"] == 0
+    assert "temperature" not in second
+    assert metadata.temperature_zero is False
+    assert result.status == "ok"
+    assert "rejected temperature=0" in caplog.text
+    record = cache.get(PNG, MODEL, PROMPT_VERSION)
+    assert record is not None
+    assert record["temperature_zero"] is False
+
+
+def test_other_bad_requests_are_not_retried() -> None:
+    class Rejects(_Completions):
+        def create(self, **kwargs: object) -> _Response:
+            self.calls.append(kwargs)
+            request = httpx2.Request("POST", "https://api.openai.com/v1/x")
+            raise BadRequestError(
+                "invalid image",
+                response=httpx2.Response(400, request=request),
+                body=None,
+            )
+
+    client = FakeClient()
+    client.completions = Rejects(ENGLISH)
+    with pytest.raises(BadRequestError, match="invalid image"):
+        extract.extract(PNG, client=client)
+    assert len(client.completions.calls) == 1
+
+
+def test_use_cache_false_skips_read_but_writes() -> None:
+    first = FakeClient()
+    extract.extract(PNG, client=first)
+    payload = json.loads(ENGLISH)
+    payload["invoice"]["invoice_number"] = "INV-FRESH"
+    second = FakeClient(json.dumps(payload))
+
+    result, metadata = extract.extract(PNG, client=second, use_cache=False)
+
+    assert len(second.completions.calls) == 1
+    assert metadata.cache_hit is False
+    assert result.invoice.invoice_number == "INV-FRESH"
+    record = cache.get(PNG, MODEL, PROMPT_VERSION)
+    assert record is not None
+    assert "INV-FRESH" in record["content"]
 
 
 def test_second_call_is_served_from_cache() -> None:
@@ -117,6 +192,7 @@ def test_metadata_on_miss_and_hit() -> None:
     assert miss.completion_tokens == 300
     assert miss.latency_ms >= 0
     assert miss.estimated_cost_usd is None
+    assert miss.temperature_zero is True
 
     _, hit = extract.extract(PNG, client=FakeClient())
     assert hit.cache_hit is True
@@ -135,6 +211,7 @@ def test_usage_is_cached_with_response() -> None:
     assert record["prompt_tokens"] == 1200
     assert record["completion_tokens"] == 300
     assert record["latency_ms"] == metadata.latency_ms
+    assert record["temperature_zero"] is True
 
 
 def test_malformed_cached_record_raises() -> None:
@@ -173,6 +250,16 @@ def test_free_text_fields_keep_arabic_indic_digits() -> None:
     result, _ = extract.extract(PNG, client=FakeClient(ARABIC_INDIC))
     assert result.invoice.line_items[0].description == "استشارة هندسية ٣"
     assert result.invoice.seller_name == "شركة الخليج للمعدات الطبية"
+
+
+@pytest.mark.parametrize("suffix", ["Z", "+03:00", "+0300", "-05:00", ""])
+def test_timezone_suffix_is_stripped_from_timestamp(suffix: str) -> None:
+    payload = json.loads(ENGLISH)
+    payload["invoice"]["invoice_timestamp"] = "2026-07-31T15:38:00" + suffix
+    invoice, _ = parse_response(json.dumps(payload))
+
+    assert invoice.invoice_timestamp == datetime(2026, 7, 31, 15, 38)  # noqa: DTZ001
+    assert invoice.invoice_timestamp.tzinfo is None
 
 
 def test_normalise_digits_touches_numeric_fields_only() -> None:
@@ -272,7 +359,7 @@ def test_malformed_response_is_still_cached() -> None:
 def test_usage_logged_without_prices(caplog: pytest.LogCaptureFixture) -> None:
     with caplog.at_level(logging.INFO, logger="app.extract"):
         extract.extract(PNG, client=FakeClient())
-    assert "cache_hit=False" in caplog.text
+    assert "cache_hit=False temperature_zero=True" in caplog.text
     assert "prompt_tokens=1200 completion_tokens=300" in caplog.text
     assert "estimated_cost=unknown" in caplog.text
 

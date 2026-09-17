@@ -11,7 +11,7 @@ from eval.load_data import EVAL_DIR, load_samples, summary
 RECORD: dict[str, Any] = {
     "invoice_number": "INV-2026-1000",
     "invoice_date": "2026-07-31",
-    "invoice_timestamp": "2026-07-31T15:38:00Z",
+    "invoice_timestamp": "2026-07-31T15:38:00",
     "invoice_type": "standard",
     "seller_name": "شركة الخليج",
     "seller_name_en": "Gulf Co",

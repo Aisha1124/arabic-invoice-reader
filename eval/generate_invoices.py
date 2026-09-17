@@ -200,11 +200,13 @@ def build_invoice(idx: int, rng: random.Random) -> Invoice:
     subtotal = money(subtotal)
     vat_total = money(vat_total)
     total = money(subtotal + vat_total)
-    ts = date.strftime("%Y-%m-%dT%H:%M:%SZ")
+    # The page prints wall-clock time with no zone, so ground truth is naive.
+    # The QR payload keeps the Z form ZATCA TLV examples use; it is not scored.
+    ts = date.strftime("%Y-%m-%dT%H:%M:%S")
 
     qr = None
     if simplified and seller_vat:
-        qr = zatca_qr(seller_ar, seller_vat, ts, str(total), str(vat_total))
+        qr = zatca_qr(seller_ar, seller_vat, ts + "Z", str(total), str(vat_total))
 
     numerals = "arabic_indic" if rng.random() < 0.25 else "latin"
     language = "bilingual" if rng.random() < 0.6 else "arabic_only"

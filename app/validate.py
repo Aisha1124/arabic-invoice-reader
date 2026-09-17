@@ -1,5 +1,4 @@
 import re
-from datetime import UTC
 from decimal import Decimal
 
 from app.schema import ExtractionResult, FieldConfidence, Finding, Invoice, LineItem
@@ -138,23 +137,20 @@ def _check_totals_have_line_items(invoice: Invoice) -> Finding | None:
 
 def _check_date_matches_timestamp(invoice: Invoice) -> Finding | None:
     """
-    Compares invoice_date with the UTC date of invoice_timestamp. A non-UTC
-    timestamp near midnight can legitimately differ by a day; we choose not to
-    handle timezones here. A naive timestamp is compared as-is.
+    Both values are wall-clock readings from the same page, so the timestamp's
+    own date is compared directly; no zone conversion is applied.
     """
     if invoice.invoice_date is None or invoice.invoice_timestamp is None:
         return None
-    timestamp = invoice.invoice_timestamp
-    if timestamp.tzinfo is not None:
-        timestamp = timestamp.astimezone(UTC)
-    if timestamp.date() == invoice.invoice_date:
+    if invoice.invoice_timestamp.date() == invoice.invoice_date:
         return None
     return Finding(
         rule="invoice_date_matches_timestamp",
         severity="error",
         message=(
             f"invoice_date is {invoice.invoice_date} but invoice_timestamp"
-            f" {invoice.invoice_timestamp.isoformat()} falls on {timestamp.date()} UTC"
+            f" {invoice.invoice_timestamp.isoformat()} falls on"
+            f" {invoice.invoice_timestamp.date()}"
         ),
         fields=["invoice_date", "invoice_timestamp"],
     )

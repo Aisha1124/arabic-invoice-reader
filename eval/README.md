@@ -92,6 +92,10 @@ both VAT numbers, and per-line VAT breakdown.
 
 VAT rate throughout is 15%.
 
+`invoice_timestamp` in `ground_truth.json` is naive local time (`2026-07-31T15:38:00`),
+exactly as the date and time lines print it; the page shows no zone. The QR payload
+carries the same instant with a `Z` suffix, as ZATCA TLV examples do, and is not scored.
+
 ## Known hard cases
 
 These are features, not bugs. Your extractor should handle them or your accuracy

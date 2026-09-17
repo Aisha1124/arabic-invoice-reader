@@ -2,11 +2,12 @@ import base64
 import json
 import logging
 import os
+import re
 import time
 from decimal import Decimal, InvalidOperation
 from typing import Any
 
-from openai import OpenAI
+from openai import BadRequestError, OpenAI
 from pydantic import ValidationError
 
 from app import cache
@@ -34,7 +35,8 @@ Return one JSON object with exactly two keys:
 "invoice": an object with these keys. Use null when a value is absent from the page.
   invoice_number: string
   invoice_date: string, YYYY-MM-DD
-  invoice_timestamp: string, ISO 8601 with timezone (the ZATCA QR timestamp)
+  invoice_timestamp: string, YYYY-MM-DDTHH:MM:SS from the printed date and time, \
+with no timezone suffix (the page does not show one)
   invoice_type: "standard" (tax invoice, buyer VAT number shown), \
 "simplified" (simplified tax invoice, retail), or "unknown"
   seller_name: string
@@ -55,6 +57,9 @@ your confidence that the value is transcribed exactly. Include every key of "inv
 and every line item field as line_items[i].field, for example "line_items[0].vat_amount". \
 Include fields you set to null."""
 
+# Invoices print wall-clock time with no zone. Any suffix the model appends
+# (usually Z or +03:00) is invented, so it is removed before parsing.
+TIMEZONE_SUFFIX = re.compile(r"(Z|[+-]\d{2}:?\d{2})$")
 ARABIC_INDIC = str.maketrans("٠١٢٣٤٥٦٧٨٩۰۱۲۳۴۵۶۷۸۹٫٬", "01234567890123456789.,")
 # Free text (description, names) is left verbatim: changing its digits alters content.
 NUMERIC_FIELDS = frozenset(
@@ -83,6 +88,9 @@ class ParseError(Exception):
     def __init__(self, message: str, raw: str) -> None:
         super().__init__(message)
         self.raw = raw
+        # Set by extract() once the call has been paid for, so callers can still
+        # account for the tokens of an answer that could not be parsed.
+        self.metadata: CallMetadata | None = None
 
 
 def model_name() -> str:
@@ -139,9 +147,11 @@ def _estimated_cost_usd(prompt_tokens: int, completion_tokens: int) -> Decimal |
     ) / Decimal(1_000_000)
 
 
-def _call_model(client: OpenAI, model: str, image_bytes: bytes) -> dict[str, Any]:
-    started = time.perf_counter()
-    response = client.chat.completions.create(
+def _request(
+    client: OpenAI, model: str, image_bytes: bytes, temperature_zero: bool
+) -> Any:
+    params: dict[str, Any] = {"temperature": 0} if temperature_zero else {}
+    return client.chat.completions.create(
         model=model,
         response_format={"type": "json_object"},
         messages=[
@@ -156,7 +166,26 @@ def _call_model(client: OpenAI, model: str, image_bytes: bytes) -> dict[str, Any
                 ],
             }
         ],
+        **params,
     )
+
+
+def _call_model(client: OpenAI, model: str, image_bytes: bytes) -> dict[str, Any]:
+    """
+    temperature=0 is requested for repeatability. Some models reject the parameter
+    outright (HTTP 400 naming it); that one case is retried without it and recorded
+    as temperature_zero=False so the eval can say which runs were deterministic.
+    """
+    started = time.perf_counter()
+    temperature_zero = True
+    try:
+        response = _request(client, model, image_bytes, temperature_zero=True)
+    except BadRequestError as exc:
+        if "temperature" not in str(exc):
+            raise
+        logger.warning("model=%s rejected temperature=0: %s", model, exc)
+        temperature_zero = False
+        response = _request(client, model, image_bytes, temperature_zero=False)
     latency_ms = round((time.perf_counter() - started) * 1000)
     content = response.choices[0].message.content
     if content is None:
@@ -167,6 +196,7 @@ def _call_model(client: OpenAI, model: str, image_bytes: bytes) -> dict[str, Any
         "prompt_tokens": usage.prompt_tokens if usage else 0,
         "completion_tokens": usage.completion_tokens if usage else 0,
         "latency_ms": latency_ms,
+        "temperature_zero": temperature_zero,
     }
 
 
@@ -179,6 +209,7 @@ def _metadata(model: str, record: dict[str, Any], cache_hit: bool) -> CallMetada
         latency_ms = int(record["latency_ms"])
         prompt_tokens = int(record["prompt_tokens"])
         completion_tokens = int(record["completion_tokens"])
+        temperature_zero = bool(record["temperature_zero"])
     except (KeyError, TypeError, ValueError) as exc:
         raise RuntimeError(
             f"cached response record is malformed ({exc!r}); delete it from"
@@ -186,10 +217,11 @@ def _metadata(model: str, record: dict[str, Any], cache_hit: bool) -> CallMetada
         ) from exc
     cost = _estimated_cost_usd(prompt_tokens, completion_tokens)
     logger.info(
-        "model=%s cache_hit=%s latency_ms=%d prompt_tokens=%d completion_tokens=%d"
-        " estimated_cost=%s",
+        "model=%s cache_hit=%s temperature_zero=%s latency_ms=%d prompt_tokens=%d"
+        " completion_tokens=%d estimated_cost=%s",
         model,
         cache_hit,
+        temperature_zero,
         latency_ms,
         prompt_tokens,
         completion_tokens,
@@ -205,6 +237,7 @@ def _metadata(model: str, record: dict[str, Any], cache_hit: bool) -> CallMetada
         completion_tokens=completion_tokens,
         estimated_cost_usd=cost,
         cache_hit=cache_hit,
+        temperature_zero=temperature_zero,
     )
 
 
@@ -224,6 +257,13 @@ def normalise_digits(invoice: dict[str, Any]) -> dict[str, Any]:
         return value
 
     return {k: fix(k, v) for k, v in invoice.items()}
+
+
+def strip_timezone(invoice: dict[str, Any]) -> dict[str, Any]:
+    timestamp = invoice.get("invoice_timestamp")
+    if isinstance(timestamp, str):
+        invoice = {**invoice, "invoice_timestamp": TIMEZONE_SUFFIX.sub("", timestamp)}
+    return invoice
 
 
 def _parse_confidences(raw: Any, content: str) -> dict[str, float]:
@@ -269,7 +309,7 @@ def parse_response(content: str) -> tuple[Invoice, dict[str, float]]:
             raw=content,
         )
     try:
-        invoice = Invoice.model_validate(normalise_digits(raw_invoice))
+        invoice = Invoice.model_validate(strip_timezone(normalise_digits(raw_invoice)))
     except ValidationError as exc:
         raise ParseError(
             f"model response does not match the Invoice schema: {exc}", raw=content
@@ -278,19 +318,24 @@ def parse_response(content: str) -> tuple[Invoice, dict[str, float]]:
 
 
 def extract(
-    image_bytes: bytes, client: OpenAI | None = None
+    image_bytes: bytes, client: OpenAI | None = None, use_cache: bool = True
 ) -> tuple[ExtractionResult, CallMetadata]:
     """
     `client` is only constructed on a cache miss, so cached images need no API key.
     Responses are cached before parsing: a malformed answer is still a paid answer,
     and re-running must not silently spend again (delete the cache file to retry).
+    `use_cache=False` skips the read but still writes, so the latest answer is kept.
     """
     model = model_name()
-    record = cache.get(image_bytes, model, PROMPT_VERSION)
+    record = cache.get(image_bytes, model, PROMPT_VERSION) if use_cache else None
     cache_hit = record is not None
     if record is None:
         record = _call_model(client or OpenAI(), model, image_bytes)
         cache.set(image_bytes, model, PROMPT_VERSION, record)
     metadata = _metadata(model, record, cache_hit)
-    invoice, confidences = parse_response(record["content"])
+    try:
+        invoice, confidences = parse_response(record["content"])
+    except ParseError as exc:
+        exc.metadata = metadata
+        raise
     return validate(invoice, confidences, _confidence_threshold()), metadata

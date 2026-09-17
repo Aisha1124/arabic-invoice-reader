@@ -2,7 +2,7 @@
   "invoice": {
     "invoice_number": "INV-2026-1000",
     "invoice_date": "2026-07-31",
-    "invoice_timestamp": "2026-07-31T15:38:00Z",
+    "invoice_timestamp": "2026-07-31T15:38:00",
     "invoice_type": "standard",
     "seller_name": "Gulf Medical Equipment Co",
     "seller_vat_number": "315839799889833",

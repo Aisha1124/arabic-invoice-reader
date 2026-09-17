@@ -226,20 +226,20 @@ def test_date_check_skipped_when_either_is_missing() -> None:
     assert _by_rule(without_timestamp, "invoice_date_matches_timestamp") == []
 
 
-def test_date_compared_against_utc_date_of_offset_timestamp() -> None:
-    # 01:00 at UTC+3 is 22:00 the previous day in UTC.
+def test_offset_timestamp_is_compared_on_its_own_date() -> None:
+    # 01:00 at UTC+3 is 22:00 the previous day in UTC; the page says the 16th.
     riyadh = timezone(timedelta(hours=3))
     timestamp = datetime(2026, 1, 16, 1, 0, tzinfo=riyadh)
 
-    same_utc_day = _run(
-        _invoice(invoice_date=date(2026, 1, 15), invoice_timestamp=timestamp)
-    )
     local_day = _run(
         _invoice(invoice_date=date(2026, 1, 16), invoice_timestamp=timestamp)
     )
+    utc_day = _run(
+        _invoice(invoice_date=date(2026, 1, 15), invoice_timestamp=timestamp)
+    )
 
-    assert _by_rule(same_utc_day, "invoice_date_matches_timestamp") == []
-    assert len(_by_rule(local_day, "invoice_date_matches_timestamp")) == 1
+    assert _by_rule(local_day, "invoice_date_matches_timestamp") == []
+    assert len(_by_rule(utc_day, "invoice_date_matches_timestamp")) == 1
 
 
 def test_naive_timestamp_is_compared_as_is() -> None:
