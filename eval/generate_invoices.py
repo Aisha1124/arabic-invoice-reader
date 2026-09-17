@@ -82,7 +82,7 @@ UNITS_AR = ["حبة", "علبة", "خدمة", "كرتون", "ساعة"]
 DEFECTS = {
     3: "missing_buyer_vat",      # standard invoice with no buyer TIN (top ZATCA rejection)
     9: "lumped_vat",             # single VAT figure, no per-line breakdown (2nd most common)
-    14: "missing_buyer_vat",
+    14: "missing_buyer_vat",     # rolls simplified under SEED 20260916, so no defect is applied
     21: "lumped_vat",
     26: "missing_seller_vat",
 }
@@ -151,6 +151,12 @@ def zatca_qr(seller: str, vat: str, ts: str, total: str, vat_amt: str) -> str:
 def build_invoice(idx: int, rng: random.Random) -> Invoice:
     defect = DEFECTS.get(idx)
     simplified = rng.random() < 0.45
+    # A simplified invoice has no buyer, so a missing buyer VAT is correct there,
+    # not a defect. This was a real bug: the original set shipped with
+    # INV-2026-1014 (index 14, rolled simplified) labelled missing_buyer_vat.
+    # The check consumes no randomness, so the rendered invoices are unchanged.
+    if defect == "missing_buyer_vat" and simplified:
+        defect = None
 
     seller_ar, seller_en = rng.choice(SELLERS)
     city_ar, city_en = rng.choice(CITIES)
