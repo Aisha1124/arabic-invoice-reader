@@ -287,28 +287,21 @@ def test_json_numbers_are_parsed_as_decimal() -> None:
     assert invoice.line_items[0].vat_amount == Decimal("5612.45")
 
 
-def test_low_confidence_marks_field_for_review() -> None:
+def test_low_confidence_is_recorded_without_a_finding() -> None:
     payload = json.loads(ENGLISH)
     payload["confidence"]["seller_vat_number"] = 0.5
     result, _ = extract.extract(PNG, client=FakeClient(json.dumps(payload)))
 
-    assert result.status == "needs_review"
-    (finding,) = result.findings
-    assert finding.rule == "confidence_below_threshold"
-    assert finding.fields == ["seller_vat_number"]
-    flagged = {c.field for c in result.confidences if c.needs_review}
-    assert flagged == {"seller_vat_number"}
+    assert result.status == "ok"
+    assert result.findings == []
+    by_field = {c.field: c for c in result.confidences}
+    assert by_field["seller_vat_number"].confidence == 0.5
+    assert by_field["seller_vat_number"].needs_review is False
 
 
 def test_missing_model_env_raises(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.delenv("OPENAI_MODEL")
     with pytest.raises(RuntimeError, match="OPENAI_MODEL is not set"):
-        extract.extract(PNG, client=FakeClient())
-
-
-def test_invalid_threshold_env_raises(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setenv("CONFIDENCE_THRESHOLD", "high")
-    with pytest.raises(RuntimeError, match="CONFIDENCE_THRESHOLD"):
         extract.extract(PNG, client=FakeClient())
 
 

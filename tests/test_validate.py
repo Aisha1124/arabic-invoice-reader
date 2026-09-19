@@ -6,7 +6,6 @@ import pytest
 from app.schema import ExtractionResult, Finding, Invoice, LineItem
 from app.validate import validate
 
-THRESHOLD = 0.80
 SELLER_VAT = "300000000000003"
 BUYER_VAT = "310000000000003"
 
@@ -53,7 +52,7 @@ def _invoice(lines: list[LineItem] | None = None, **overrides: object) -> Invoic
 def _run(
     invoice: Invoice, confidences: dict[str, float] | None = None
 ) -> ExtractionResult:
-    return validate(invoice, confidences or {}, THRESHOLD)
+    return validate(invoice, confidences or {})
 
 
 def _by_rule(result: ExtractionResult, rule: str) -> list[Finding]:
@@ -497,26 +496,15 @@ def test_simplified_invoice_with_date_but_no_timestamp_is_warning() -> None:
 # --- confidence gating --------------------------------------------------------
 
 
-def test_confidence_at_threshold_is_not_gated() -> None:
-    result = _run(_invoice(), {"total": 0.80})
-
-    [conf] = result.confidences
-    assert conf.needs_review is False
-    assert _by_rule(result, "confidence_below_threshold") == []
-    assert result.status == "ok"
-
-
-def test_confidence_below_threshold_is_gated_with_warning() -> None:
-    result = _run(_invoice(), {"total": 0.79, "seller_name": 0.99})
+def test_low_confidence_is_recorded_but_never_gates() -> None:
+    result = _run(_invoice(), {"total": 0.0, "seller_name": 0.99})
 
     by_field = {c.field: c for c in result.confidences}
-    assert by_field["total"].needs_review is True
+    assert by_field["total"].confidence == 0.0
+    assert by_field["total"].needs_review is False
     assert by_field["seller_name"].needs_review is False
-    [finding] = _by_rule(result, "confidence_below_threshold")
-    assert finding.severity == "warning"
-    assert finding.fields == ["total"]
-    assert "0.79" in finding.message
-    assert result.status == "needs_review"
+    assert result.findings == []
+    assert result.status == "ok"
 
 
 def test_arithmetic_error_forces_needs_review_despite_high_confidence() -> None:

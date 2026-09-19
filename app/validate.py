@@ -266,42 +266,14 @@ def _check_simplified_qr_fields(invoice: Invoice) -> Finding | None:
     )
 
 
-def _gate_confidences(
-    confidences: dict[str, float], threshold: float, error_fields: set[str]
-) -> tuple[list[FieldConfidence], list[Finding]]:
-    gated: list[FieldConfidence] = []
-    findings: list[Finding] = []
-    for field, score in confidences.items():
-        below = score < threshold
-        if below:
-            findings.append(
-                Finding(
-                    rule="confidence_below_threshold",
-                    severity="warning",
-                    message=(
-                        f"{field}: confidence {score:.2f} is below"
-                        f" CONFIDENCE_THRESHOLD {threshold:.2f}"
-                    ),
-                    fields=[field],
-                )
-            )
-        gated.append(
-            FieldConfidence(
-                field=field,
-                confidence=score,
-                needs_review=below or field in error_fields,
-            )
-        )
-    return gated, findings
-
-
-def validate(
-    invoice: Invoice, confidences: dict[str, float], threshold: float
-) -> ExtractionResult:
+def validate(invoice: Invoice, confidences: dict[str, float]) -> ExtractionResult:
     """
-    `confidences` maps field paths (e.g. "total", "line_items[0].vat_amount") to scores.
-    Any finding of either severity queues the invoice: a warning means the invoice
-    itself is non-compliant, and a human must still see that.
+    `confidences` maps field paths (e.g. "total", "line_items[0].vat_amount") to the
+    model's self-reported scores. They are recorded, never acted on: measured on this
+    project's eval set they were inversely calibrated (CLAUDE.md section 7), so
+    needs_review comes from findings alone. Any finding of either severity queues the
+    invoice: a warning means the invoice itself is non-compliant, and a human must
+    still see that.
     """
     findings: list[Finding] = []
     check_vat = not _is_lumped_vat(invoice)
@@ -322,11 +294,14 @@ def validate(
     error_fields = {
         field for f in findings if f.severity == "error" for field in f.fields
     }
-    gated, low_confidence = _gate_confidences(confidences, threshold, error_fields)
-    findings.extend(low_confidence)
     return ExtractionResult(
         invoice=invoice,
-        confidences=gated,
+        confidences=[
+            FieldConfidence(
+                field=field, confidence=score, needs_review=field in error_fields
+            )
+            for field, score in confidences.items()
+        ],
         findings=findings,
         status="needs_review" if findings else "ok",
     )

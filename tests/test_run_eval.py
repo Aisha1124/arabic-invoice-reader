@@ -13,10 +13,13 @@ from eval.run_eval import (
     accuracy,
     agreement,
     calibration,
+    confidence_threshold,
     defect_catch,
+    dump_runs,
     flatten,
     main,
     report,
+    subgroup_table,
 )
 
 META = CallMetadata(
@@ -145,6 +148,15 @@ def test_calibration_splits_scores_by_correctness() -> None:
     assert "fields with no score from the model:  15" in text
 
 
+def test_invalid_threshold_env_raises(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("CONFIDENCE_THRESHOLD", "high")
+    with pytest.raises(RuntimeError, match="CONFIDENCE_THRESHOLD"):
+        confidence_threshold()
+    monkeypatch.setenv("CONFIDENCE_THRESHOLD", "1.5")
+    with pytest.raises(RuntimeError, match="between 0 and 1"):
+        confidence_threshold()
+
+
 def test_calibration_with_no_errors_reports_na() -> None:
     lines = calibration([_sample()], {"a.png": [_run(_invoice())]}, threshold=0.8)
     assert "mean confidence on incorrect fields: n/a (n=0)" in "\n".join(lines)
@@ -162,6 +174,33 @@ def test_report_includes_agreement_only_with_repeats(
     assert "prompt_tokens=10 completion_tokens=5" in single
     double = report([_sample()], {"a.png": [_run(_invoice()), _run(_invoice())]}, 2)
     assert "agreement" in double
+
+
+def test_subgroup_table_splits_by_language_and_numerals() -> None:
+    bilingual = _sample("a.png")
+    arabic_only = _sample("b.png")
+    arabic_only.meta.language = "arabic_only"
+    arabic_only.meta.numerals = "arabic_indic"
+    runs = {"a.png": [_run(_invoice())], "b.png": [_run(_invoice(total="1.00"))]}
+
+    lines = subgroup_table([bilingual, arabic_only], runs)
+
+    assert "all (n=2)" in lines[0]
+    assert "arabic_only (n=1)" in lines[0]
+    total_row = next(line for line in lines if line.startswith("total"))
+    assert total_row.split() == ["total", "50.0%", "0.0%", "100.0%", "0.0%", "100.0%"]
+
+
+def test_dump_runs_writes_json_with_string_fields(tmp_path: Path) -> None:
+    path = tmp_path / "runs.json"
+    dump_runs(path, {"a.png": [_run(_invoice(), ["r"], {"total": 1.0})]})
+
+    data = json.loads(path.read_text(encoding="utf-8"))
+    (run,) = data["a.png"]
+    assert run["fields"]["total"] == "230.00"
+    assert run["rules"] == ["r"]
+    assert run["confidences"] == {"total": 1.0}
+    assert run["metadata"]["model"] == "m"
 
 
 def test_main_refuses_large_uncached_runs(

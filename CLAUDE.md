@@ -164,8 +164,9 @@ class FieldConfidence(BaseModel):
 - If every line shares one lumped VAT figure rather than per-line VAT, flag it. This is the second most common rejection.
 - Simplified invoices: seller name, timestamp, total, and VAT amount must all be present. With the seller VAT number above, these are the five TLV QR fields.
 
-**Confidence gating**
-- Any field below `CONFIDENCE_THRESHOLD` (default 0.80, from env) sets `needs_review = true`
+**Confidence scores**
+- The prompt asks for a per-field confidence score and `FieldConfidence` records it. Nothing gates on it. The threshold gate was removed after being measured as inversely calibrated on this project's eval set: over 102 scored fields on three samples, mean confidence was 0.977 on correct fields and 1.000 on incorrect ones, all 15 wrong values scored 1.0, and the only sub-threshold scores were on two correctly-null fields (false alarms). See `eval/README.md` "Findings". Arithmetic validation caught every one of those misreads.
+- The scores stay in the output and `eval/run_eval.py` keeps the calibration metric, so the finding remains reproducible. `CONFIDENCE_THRESHOLD` (default 0.80, from env) is used only by that report.
 - Any failed arithmetic check forces `needs_review = true` on the fields involved
 - Any finding of either severity sets `"status": "needs_review"`. Severity says whether we read the invoice wrong; status says whether a human should look. A warning means the invoice itself is non-compliant and will be rejected at clearance, so the answer is yes for both.
 - An invoice with `"status": "needs_review"` returns HTTP 200 — it is not an error, it is a queue
@@ -175,7 +176,7 @@ class FieldConfidence(BaseModel):
 Every finding carries `severity: "error" | "warning"`.
 
 - `"error"`: any arithmetic check that fails. The numbers do not add up, so the extraction is wrong. Forces `needs_review = true` on the fields involved.
-- `"warning"`: ZATCA structural checks, and confidence-threshold breaches. The extraction may be correct and the invoice itself is non-compliant. Flagged for the reviewer, but does not by itself mean the extraction failed.
+- `"warning"`: ZATCA structural checks. The extraction may be correct and the invoice itself is non-compliant. Flagged for the reviewer, but does not by itself mean the extraction failed.
 
 These are different failures. An arithmetic error means we read the invoice wrong. A structural finding means we read it right and the invoice has a compliance problem. Conflating them would make the eval numbers meaningless — we could not tell extraction failures from real ZATCA defects in the source documents.
 
@@ -260,3 +261,4 @@ Never: silently simplify the task, fake a result, stub something and describe it
 - Lumped-VAT invoices have no per-line VAT, but `LineItem.vat_amount` is required. Convention: `0`. Prompt v2 instructs the model to emit `"0"`, `eval/load_data.py` maps the empty ground-truth value to `0`, and `validate.py` treats all-zero line VAT with a non-zero `vat_total` as lumped.
 - Model output is not guaranteed to be deterministic. `extract.py` requests `temperature=0` and records in `CallMetadata.temperature_zero` whether the model accepted it, but the same image has produced materially different field errors on consecutive runs. Single-pass eval numbers carry run-to-run variance; `eval/run_eval.py --repeats N` reports per-field agreement across runs alongside accuracy, and any published figure should say which it is.
 - gpt-4o misreads Arabic-Indic amounts in table cells even when clearly printed (Noto Naskh, 22px, `٫` separator), with the same wrong values on repeated runs and confidence 1.0. Details in `eval/README.md` "Findings". The arithmetic checks catch it; the confidence scores do not. Report the 6 Arabic-Indic samples separately.
+- The prompt still asks for per-field confidence scores that nothing acts on. That is roughly 400 output tokens per call (the `confidence` object is about a third of each response) spent so the inverse-calibration finding stays verifiable with the shipped code. Deliberate trade-off; drop it if the finding is ever retired.

@@ -9,20 +9,17 @@ pass hides that.
 """
 
 import argparse
+import json
+import os
 import re
 import sys
-from dataclasses import dataclass, field
+from dataclasses import asdict, dataclass, field
 from decimal import Decimal
+from pathlib import Path
 from typing import Any
 
 from app import cache
-from app.extract import (
-    PROMPT_VERSION,
-    ParseError,
-    confidence_threshold,
-    extract,
-    model_name,
-)
+from app.extract import PROMPT_VERSION, ParseError, extract, model_name
 from app.schema import CallMetadata, Invoice
 from eval.load_data import Sample, load_samples
 
@@ -122,6 +119,22 @@ def defect_catch(samples: list[Sample], runs: dict[str, list[Run]]) -> list[str]
     return lines
 
 
+def confidence_threshold() -> float:
+    """Only the calibration report uses this; nothing in the app gates on it."""
+    raw = os.environ.get("CONFIDENCE_THRESHOLD", "0.80")
+    try:
+        threshold = float(raw)
+    except ValueError as exc:
+        raise RuntimeError(
+            f"CONFIDENCE_THRESHOLD must be a number between 0 and 1, received {raw!r}"
+        ) from exc
+    if not 0.0 <= threshold <= 1.0:
+        raise RuntimeError(
+            f"CONFIDENCE_THRESHOLD must be between 0 and 1, received {threshold}"
+        )
+    return threshold
+
+
 def calibration(
     samples: list[Sample], runs: dict[str, list[Run]], threshold: float
 ) -> list[str]:
@@ -162,6 +175,54 @@ def _mean(scores: list[float]) -> str:
     return f"{sum(scores) / len(scores):.3f}" if scores else "n/a"
 
 
+SUBGROUPS = (
+    ("arabic_only", lambda s: s.meta.language == "arabic_only"),
+    ("bilingual", lambda s: s.meta.language == "bilingual"),
+    ("arabic_indic", lambda s: s.meta.numerals == "arabic_indic"),
+    ("latin", lambda s: s.meta.numerals == "latin"),
+)
+
+
+def subgroup_table(samples: list[Sample], runs: dict[str, list[Run]]) -> list[str]:
+    """Per-field accuracy split by layout language and numeral style."""
+    columns = [("all", samples)] + [
+        (name, [s for s in samples if keep(s)]) for name, keep in SUBGROUPS
+    ]
+    columns = [(name, subset) for name, subset in columns if subset]
+    tables = {name: accuracy(subset, runs) for name, subset in columns}
+    header = f"{'field':<28}" + "".join(
+        f"{name} (n={len(subset)})".rjust(20) for name, subset in columns
+    )
+    out = [header, "-" * len(header)]
+    for path in tables["all"]:
+        row = f"{path:<28}"
+        for name, _ in columns:
+            flags = tables[name][path]
+            row += f"{100 * sum(flags) / len(flags):.1f}%".rjust(20)
+        out.append(row)
+    return out
+
+
+def dump_runs(path: Path, runs: dict[str, list[Run]]) -> None:
+    """Raw per-run output, so later cuts of the numbers need no new API calls."""
+    serialisable = {
+        file: [
+            {
+                **asdict(run),
+                "metadata": run.metadata.model_dump(mode="json")
+                if run.metadata
+                else None,
+                "fields": {k: str(v) for k, v in run.fields.items()}
+                if run.fields is not None
+                else None,
+            }
+            for run in file_runs
+        ]
+        for file, file_runs in runs.items()
+    }
+    path.write_text(json.dumps(serialisable, ensure_ascii=False, indent=1), "utf-8")
+
+
 def _pct(flags: list[bool]) -> str:
     fraction = f"({sum(flags)}/{len(flags)})"
     return f"{100 * sum(flags) / len(flags):6.1f}% {fraction:>9}"
@@ -178,6 +239,7 @@ def report(samples: list[Sample], runs: dict[str, list[Run]], repeats: int) -> s
             row += f"{_pct(agree[name]):>20}"
         out.append(row)
     all_runs = [r for rs in runs.values() for r in rs]
+    out += ["", *subgroup_table(samples, runs)]
     out += [
         "",
         f"seeded defects caught ({len(all_runs)} runs):",
@@ -239,6 +301,9 @@ def main(argv: list[str] | None = None) -> int:
         action="store_true",
         help=f"allow more than {MAX_UNCONFIRMED_CALLS} API calls",
     )
+    parser.add_argument(
+        "--dump", type=Path, metavar="PATH", help="write raw per-run results as JSON"
+    )
     args = parser.parse_args(argv)
     if args.repeats < 1:
         parser.error("--repeats must be at least 1")
@@ -262,6 +327,8 @@ def main(argv: list[str] | None = None) -> int:
         file=sys.stderr,
     )
     runs = {s.meta.file: run_sample(s, args.repeats, use_cache) for s in samples}
+    if args.dump:
+        dump_runs(args.dump, runs)
     print(report(samples, runs, args.repeats))
     return 0
 

@@ -111,21 +111,6 @@ def model_name() -> str:
     return name
 
 
-def confidence_threshold() -> float:
-    raw = os.environ.get("CONFIDENCE_THRESHOLD", "0.80")
-    try:
-        threshold = float(raw)
-    except ValueError as exc:
-        raise RuntimeError(
-            f"CONFIDENCE_THRESHOLD must be a number between 0 and 1, received {raw!r}"
-        ) from exc
-    if not 0.0 <= threshold <= 1.0:
-        raise RuntimeError(
-            f"CONFIDENCE_THRESHOLD must be between 0 and 1, received {threshold}"
-        )
-    return threshold
-
-
 def _data_url(image_bytes: bytes) -> str:
     if image_bytes.startswith(b"\x89PNG\r\n\x1a\n"):
         mime = "image/png"
@@ -346,4 +331,4 @@ def extract(
     except ParseError as exc:
         exc.metadata = metadata
         raise
-    return validate(invoice, confidences, confidence_threshold()), metadata
+    return validate(invoice, confidences), metadata

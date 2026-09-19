@@ -156,6 +156,6 @@ def test_real_set_matches_readme_composition() -> None:
         "missing_seller_vat": "seller_vat_number_present",
     }
     for sample in samples:
-        rules = [f.rule for f in validate(sample.invoice, {}, 0.8).findings]
+        rules = [f.rule for f in validate(sample.invoice, {}).findings]
         defect = sample.meta.seeded_defect
         assert rules == ([expected_rule[defect]] if defect else []), sample.meta.file
