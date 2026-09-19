@@ -111,7 +111,7 @@ def model_name() -> str:
     return name
 
 
-def _confidence_threshold() -> float:
+def confidence_threshold() -> float:
     raw = os.environ.get("CONFIDENCE_THRESHOLD", "0.80")
     try:
         threshold = float(raw)
@@ -346,4 +346,4 @@ def extract(
     except ParseError as exc:
         exc.metadata = metadata
         raise
-    return validate(invoice, confidences, _confidence_threshold()), metadata
+    return validate(invoice, confidences, confidence_threshold()), metadata

@@ -8,7 +8,16 @@ import pytest
 from app import cache, extract
 from app.schema import CallMetadata, Invoice, LineItem
 from eval.load_data import GroundTruthMeta, Sample
-from eval.run_eval import Run, accuracy, agreement, defect_catch, flatten, main, report
+from eval.run_eval import (
+    Run,
+    accuracy,
+    agreement,
+    calibration,
+    defect_catch,
+    flatten,
+    main,
+    report,
+)
 
 META = CallMetadata(
     model="m",
@@ -67,11 +76,16 @@ def _sample(file: str = "a.png", defect: str | None = None) -> Sample:
     )
 
 
-def _run(invoice: Invoice | None, rules: list[str] | None = None) -> Run:
+def _run(
+    invoice: Invoice | None,
+    rules: list[str] | None = None,
+    confidences: dict[str, float] | None = None,
+) -> Run:
     return Run(
         metadata=META,
         fields=flatten(invoice) if invoice else None,
         rules=rules or [],
+        confidences=confidences or {},
     )
 
 
@@ -115,9 +129,34 @@ def test_defect_catch_reports_rule_hits_per_run() -> None:
     assert line.endswith("caught 1/2")
 
 
-def test_report_includes_agreement_only_with_repeats() -> None:
+def test_calibration_splits_scores_by_correctness() -> None:
+    scores = {"total": 1.0, "subtotal": 0.5, "line_items[0].unit_price": 0.9}
+    wrong_total = _invoice(total="231.00")
+    runs = {"a.png": [_run(wrong_total, confidences=scores)]}
+
+    lines = calibration([_sample()], runs, threshold=0.8)
+
+    text = "\n".join(lines)
+    assert "mean confidence on correct fields:   0.700 (n=2)" in text
+    assert "mean confidence on incorrect fields: 1.000 (n=1)" in text
+    assert "incorrect fields scored >= threshold: 1/1" in text
+    assert "correct fields scored < threshold:    1/2" in text
+    # 12 top-level + 6 line fields = 18 scorable paths, 3 scored; count is never scored.
+    assert "fields with no score from the model:  15" in text
+
+
+def test_calibration_with_no_errors_reports_na() -> None:
+    lines = calibration([_sample()], {"a.png": [_run(_invoice())]}, threshold=0.8)
+    assert "mean confidence on incorrect fields: n/a (n=0)" in "\n".join(lines)
+
+
+def test_report_includes_agreement_only_with_repeats(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.delenv("CONFIDENCE_THRESHOLD", raising=False)
     runs = {"a.png": [_run(_invoice())]}
     single = report([_sample()], runs, repeats=1)
+    assert "confidence calibration (threshold 0.80)" in single
     assert "agreement" not in single
     assert "temperature_zero=1/1" in single
     assert "prompt_tokens=10 completion_tokens=5" in single

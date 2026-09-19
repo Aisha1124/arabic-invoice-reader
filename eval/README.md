@@ -120,17 +120,69 @@ table should say it does not.
 Things learned by running an extractor over this set. They describe the model,
 not the data, and are recorded so nobody spends time "fixing" the rendering again.
 
-**Arabic-Indic amounts are misread by gpt-4o regardless of rendering.** On
-INV-2026-1002, three repeated runs at `temperature=0` returned the same wrong
-values for the same cells every time — `٧٧٫٥٨`→75.8, `٦٢٠٫٦٤`→606.4,
-`٦١٠٫٨٤`→61.84, `٢٤٤٣٫٣٦`→247.36, `٤٣١٩٫١٥`→4219.15 — first in Amiri at 19px
-with an ASCII period (where the separator/zero ambiguity explained it), then in
-Noto Naskh at 19px with `٫`, then in Noto Naskh at 22px with `٫`, where every cell
-is plainly legible to a human. The errors are mostly single-digit deletions and
-substitutions, stable across runs, with confidence reported as 1.0. Quantities,
-15-digit VAT numbers and dates in the same numerals were read correctly. Latin-numeral
-invoices did not show this. Treat per-field accuracy on the 6 Arabic-Indic samples
-as a model limitation, and report it separately from the other 24.
+**Scope.** Everything below was measured with one model (`gpt-4o`, September 2026),
+on one invoice from this generator (INV-2026-1002, the 6-sample Arabic-Indic subset
+is where it applies), with `temperature=0`. It is a reproducible observation, not a
+general result about vision models, and it may not hold on other models, other
+fonts, or real scans.
+
+### Multi-digit decimal amounts in Arabic-Indic numerals are misread
+
+INV-2026-1002 was extracted three times under each of three renderings of the
+numeric table cells. Ground truth, layout and every other pixel were identical
+across conditions.
+
+| Rendering of numeric cells | unit_price | line_total | vat_amount | agreement across 3 runs |
+|---|---|---|---|---|
+| Amiri 19px, ASCII `.` separator (first release) | 8/15 | 8/15 | 8/15 | 60% / 80% / 60% |
+| Noto Naskh 19px, `٫` separator | 6/15 | 3/15 | 6/15 | 100% / 100% / 60% |
+| Noto Naskh 22px, `٫` separator (current) | 6/15 | 3/15 | 6/15 | 80% / 100% / 100% |
+
+`subtotal`, `vat_total` and `total` were wrong in 25 of 27 runs. Typical returns
+for the current rendering, identical in all three runs: `٧٧٫٥٨`→75.8,
+`٦٢٠٫٦٤`→606.4, `٦٩٫٠٥`→69.5, `٦١٠٫٨٤`→61.84, `٢٤٤٣٫٣٦`→247.36,
+`٤٣١٩٫١٥`→4219.15. Mostly single-digit deletions, sometimes a substitution.
+
+Three things follow from the table:
+
+1. **Making the rendering clearer did not help; accuracy fell.** The first
+   release's ASCII period is drawn by Amiri as the same low dot as `٠`, and the
+   errors in that condition had a separator/zero-swap signature (`٦١٠٫٨٤`→61.084).
+   Fixing the separator and font removed that signature and made the cells plainly
+   legible to a human, and line_total accuracy went from 8/15 to 3/15.
+2. **At `temperature=0` the wrong values are stable.** Agreement rose to 100% on
+   most cells once the rendering was unambiguous: the model returns the same wrong
+   number every time. This is systematic, not noise.
+3. **The internal control rules out the script and the font.** In the same runs,
+   on the same page, in the same numerals: single-digit quantities 45/45, the
+   printed date 9/9, the printed time 9/9, the invoice number 9/9, and the two
+   15-digit VAT numbers 17/18 (one run dropped a digit from the seller VAT, in the
+   Amiri header line). Multi-digit decimal amounts: 24/54, 17/54, 15/54 by
+   condition. The failure is specific to multi-digit values with a decimal
+   separator, not to Arabic-Indic digits generally.
+
+Latin-numeral invoices in the same runs (INV-2026-1000, INV-2026-1001) had every
+amount correct. Report the 6 Arabic-Indic samples separately from the other 24;
+pooling them hides this.
+
+### The model's confidence scores do not predict its errors
+
+Measured by `run_eval.py`'s calibration report over INV-2026-1000/1001/1002,
+one run each, current rendering, 102 scored fields:
+
+```
+mean confidence on correct fields:   0.977 (n=87)
+mean confidence on incorrect fields: 1.000 (n=15)
+incorrect fields scored >= threshold: 15/15
+correct fields scored < threshold:    2/87
+```
+
+Every wrong value carried a score of 1.0. The only scores below 1.0 were 0.0 on
+fields the model returned as `null` (a simplified invoice's absent buyer), which
+were correct. Across every run in this repo the scores have been 1.0 or 0.0 with
+one exception (0.9). On this evidence the confidence threshold flags nullness,
+not risk; what actually catches the misreads above is arithmetic validation, which
+flagged every one of them as a `line_total`/`vat_amount`/`subtotal` inconsistency.
 
 ## Regenerating
 

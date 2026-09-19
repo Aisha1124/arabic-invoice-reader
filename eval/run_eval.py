@@ -16,7 +16,13 @@ from decimal import Decimal
 from typing import Any
 
 from app import cache
-from app.extract import PROMPT_VERSION, ParseError, extract, model_name
+from app.extract import (
+    PROMPT_VERSION,
+    ParseError,
+    confidence_threshold,
+    extract,
+    model_name,
+)
 from app.schema import CallMetadata, Invoice
 from eval.load_data import Sample, load_samples
 
@@ -34,6 +40,7 @@ class Run:
     metadata: CallMetadata | None  # None only if the call itself returned no content
     fields: dict[str, Any] | None  # None when the response could not be parsed
     rules: list[str] = field(default_factory=list)
+    confidences: dict[str, float] = field(default_factory=dict)
 
 
 def flatten(invoice: Invoice) -> dict[str, Any]:
@@ -69,6 +76,7 @@ def run_sample(sample: Sample, repeats: int, use_cache: bool) -> list[Run]:
                 metadata=metadata,
                 fields=flatten(result.invoice),
                 rules=[f.rule for f in result.findings],
+                confidences={c.field: c.confidence for c in result.confidences},
             )
         )
     return runs
@@ -114,6 +122,46 @@ def defect_catch(samples: list[Sample], runs: dict[str, list[Run]]) -> list[str]
     return lines
 
 
+def calibration(
+    samples: list[Sample], runs: dict[str, list[Run]], threshold: float
+) -> list[str]:
+    """
+    Does the model's confidence predict its errors? Compares the mean score on
+    correct fields with the mean on incorrect ones, and counts wrong fields that
+    the threshold would have waved through. Fields the model gave no score are
+    reported but excluded from the means.
+    """
+    correct: list[float] = []
+    incorrect: list[float] = []
+    unscored = 0
+    for sample in samples:
+        for path, value in flatten(sample.invoice).items():
+            if path == "line_items.count":
+                continue
+            for run in runs[sample.meta.file]:
+                if run.fields is None:
+                    continue
+                score = run.confidences.get(path)
+                if score is None:
+                    unscored += 1
+                    continue
+                (correct if run.fields.get(path) == value else incorrect).append(score)
+    missed = sum(s >= threshold for s in incorrect)
+    false_alarms = sum(s < threshold for s in correct)
+    return [
+        f"confidence calibration (threshold {threshold:.2f}):",
+        f"  mean confidence on correct fields:   {_mean(correct)} (n={len(correct)})",
+        f"  mean confidence on incorrect fields: {_mean(incorrect)} (n={len(incorrect)})",
+        f"  incorrect fields scored >= threshold: {missed}/{len(incorrect)}",
+        f"  correct fields scored < threshold:    {false_alarms}/{len(correct)}",
+        f"  fields with no score from the model:  {unscored}",
+    ]
+
+
+def _mean(scores: list[float]) -> str:
+    return f"{sum(scores) / len(scores):.3f}" if scores else "n/a"
+
+
 def _pct(flags: list[bool]) -> str:
     fraction = f"({sum(flags)}/{len(flags)})"
     return f"{100 * sum(flags) / len(flags):6.1f}% {fraction:>9}"
@@ -135,6 +183,7 @@ def report(samples: list[Sample], runs: dict[str, list[Run]], repeats: int) -> s
         f"seeded defects caught ({len(all_runs)} runs):",
         *defect_catch(samples, runs),
     ]
+    out += ["", *calibration(samples, runs, confidence_threshold())]
     out += ["", *_summary(samples, all_runs, repeats)]
     return "\n".join(out)
 
