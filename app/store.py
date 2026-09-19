@@ -106,7 +106,7 @@ def audit_row(
     cost = metadata.estimated_cost_usd
     return AuditRow(
         id=str(uuid.uuid4()),
-        timestamp_utc=datetime.now(UTC).isoformat(timespec="milliseconds"),
+        timestamp_utc=datetime.now(UTC).isoformat(timespec="microseconds"),
         image_sha256=image_sha256,
         model=metadata.model,
         prompt_version=metadata.prompt_version,

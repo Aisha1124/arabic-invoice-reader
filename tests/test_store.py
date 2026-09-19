@@ -1,6 +1,7 @@
 import hashlib
 import json
 import re
+from dataclasses import replace
 from datetime import date, datetime
 from decimal import Decimal
 from pathlib import Path
@@ -131,9 +132,15 @@ def test_audit_row_rejects_non_hash_identifier() -> None:
 
 
 def test_write_then_read_back(db: Path) -> None:
-    first = audit_row(SHA, _result(), _metadata())
-    second = audit_row(
-        SHA, _result(), _metadata(cache_hit=True, estimated_cost_usd=None)
+    # Timestamps are set explicitly: two rows written in the same instant would
+    # otherwise be ordered by their random ids.
+    first = replace(
+        audit_row(SHA, _result(), _metadata()),
+        timestamp_utc="2026-09-19T10:00:00.000001+00:00",
+    )
+    second = replace(
+        audit_row(SHA, _result(), _metadata(cache_hit=True, estimated_cost_usd=None)),
+        timestamp_utc="2026-09-19T10:00:00.000002+00:00",
     )
     write_audit(first)
     write_audit(second)
