@@ -87,7 +87,10 @@ DEFECTS = {
     26: "missing_seller_vat",
 }
 
-ARABIC_INDIC = str.maketrans("0123456789", "٠١٢٣٤٥٦٧٨٩")
+# The decimal separator becomes U+066B as well. Left as an ASCII period, Amiri
+# draws it as the same low dot it uses for the Arabic-Indic zero, and a reader
+# (human or model) cannot tell 610.84 from 61.084.
+ARABIC_INDIC = str.maketrans("0123456789.", "٠١٢٣٤٥٦٧٨٩٫")
 
 
 def money(v) -> Decimal:
@@ -269,6 +272,10 @@ def render(inv: Invoice, rng: random.Random, ar_font: Path) -> Image.Image:
     R = W - 60          # right margin (Arabic baseline)
     L = 60              # left margin (English)
     bilingual = inv.language == "bilingual"
+    # Numeric cells on Arabic-Indic invoices use Noto Naskh, whose zero is visibly
+    # distinct from a separator; prose keeps whichever font the sample was given.
+    num_font = AR_FONTS[1] if inv.numerals == "arabic_indic" else ar_font
+    cell = 22 if inv.numerals == "arabic_indic" else 19
     y = 48
 
     # Header
@@ -345,11 +352,11 @@ def render(inv: Invoice, rng: random.Random, ar_font: Path) -> Image.Image:
 
     for ln in inv.line_items:
         c.ar((xs[0], y), ln.description_ar, 19, font_path=ar_font)
-        c.ar((xs[1], y), num(ln.quantity, inv.numerals), 19, font_path=ar_font)
-        c.ar((xs[2], y), num(ln.unit_price, inv.numerals), 19, font_path=ar_font)
-        c.ar((xs[3], y), num(ln.line_total, inv.numerals), 19, font_path=ar_font)
+        c.ar((xs[1], y), num(ln.quantity, inv.numerals), cell, font_path=num_font)
+        c.ar((xs[2], y), num(ln.unit_price, inv.numerals), cell, font_path=num_font)
+        c.ar((xs[3], y), num(ln.line_total, inv.numerals), cell, font_path=num_font)
         if not lumped:
-            c.ar((xs[4], y), num(ln.vat_amount, inv.numerals), 19, font_path=ar_font)
+            c.ar((xs[4], y), num(ln.vat_amount, inv.numerals), cell, font_path=num_font)
         y += 44
 
     c.line(y, width=2)
@@ -364,7 +371,7 @@ def render(inv: Invoice, rng: random.Random, ar_font: Path) -> Image.Image:
         bold = label.startswith("الإجمالي شامل")
         c.ar((R, y), label, 22, bold=bold, font_path=ar_font)
         c.ar((R - 620, y), f"{num(value, inv.numerals)} {inv.currency}", 22,
-             bold=bold, font_path=ar_font)
+             bold=bold, font_path=num_font)
         y += 40
 
     # QR for simplified invoices

@@ -101,15 +101,36 @@ carries the same instant with a `Z` suffix, as ZATCA TLV examples do, and is not
 These are features, not bugs. Your extractor should handle them or your accuracy
 table should say it does not.
 
-1. **Amiri renders decimal separators in Arabic style.** A value stored as
-   `5612.45` may visually read closer to `5612٫45`. Normalise separators before
-   comparing against ground truth.
+1. **Arabic-Indic invoices use the Arabic decimal separator.** A value stored as
+   `5612.45` is printed as `٥٦١٢٫٤٥` (U+066B). Normalise digits and separators
+   before comparing against ground truth. Numeric cells on these invoices are set
+   in Noto Naskh Arabic at 22px; prose keeps the sample's own font. The first
+   release printed an ASCII period in Amiri, whose period and Arabic-Indic zero
+   are the same low dot, so `٦١٠.٨٤` was unreadable as 610.84 by anyone.
 2. **Arabic-Indic numerals** appear in 6 samples. `٣١٠١٢٢٣٩٣٥٠٠٠٠٣` is the same
-   value as `310122393500003`.
+   value as `310122393500003`. See "Findings" below: current vision models
+   misread these even when clearly printed.
 3. **Mixed-direction text.** Invoice numbers like `INV-2026-1002` sit inside
    right-to-left lines. Extraction order matters.
 4. **Arabic-only invoices** have no English label to anchor on. Twelve samples
    have no English at all.
+
+## Findings
+
+Things learned by running an extractor over this set. They describe the model,
+not the data, and are recorded so nobody spends time "fixing" the rendering again.
+
+**Arabic-Indic amounts are misread by gpt-4o regardless of rendering.** On
+INV-2026-1002, three repeated runs at `temperature=0` returned the same wrong
+values for the same cells every time — `٧٧٫٥٨`→75.8, `٦٢٠٫٦٤`→606.4,
+`٦١٠٫٨٤`→61.84, `٢٤٤٣٫٣٦`→247.36, `٤٣١٩٫١٥`→4219.15 — first in Amiri at 19px
+with an ASCII period (where the separator/zero ambiguity explained it), then in
+Noto Naskh at 19px with `٫`, then in Noto Naskh at 22px with `٫`, where every cell
+is plainly legible to a human. The errors are mostly single-digit deletions and
+substitutions, stable across runs, with confidence reported as 1.0. Quantities,
+15-digit VAT numbers and dates in the same numerals were read correctly. Latin-numeral
+invoices did not show this. Treat per-field accuracy on the 6 Arabic-Indic samples
+as a model limitation, and report it separately from the other 24.
 
 ## Regenerating
 
