@@ -195,11 +195,13 @@ Every extraction writes one immutable row. Append-only. No updates, no deletes.
 | `prompt_version` | which prompt version produced this |
 | `fields_extracted` | count |
 | `fields_flagged` | count |
-| `validation_findings` | JSON array of findings |
+| `validation_findings` | JSON array of `{rule, severity, fields}` — never `message` |
 | `latency_ms` | duration |
 | `estimated_cost_usd` | spend |
 
 **Never write invoice content, names, VAT numbers, or images into the audit log.** The log records that an extraction happened and how it went, not what was in it. This is the PDPL-safe design and it is the point.
+
+`Finding.message` is excluded from `validation_findings` because it quotes content: the seller-VAT format rule prints the received number, the arithmetic rules print the amounts. `rule`, `severity` and `fields` name positions in the schema, not values, so they are safe to keep.
 
 ---
 
@@ -263,3 +265,6 @@ Never: silently simplify the task, fake a result, stub something and describe it
 - gpt-4o misreads Arabic-Indic amounts in table cells even when clearly printed (Noto Naskh, 22px, `٫` separator), with the same wrong values on repeated runs and confidence 1.0. Details in `eval/README.md` "Findings". The arithmetic checks catch it; the confidence scores do not. Report the 6 Arabic-Indic samples separately.
 - The prompt still asks for per-field confidence scores that nothing acts on. That is roughly 400 output tokens per call (the `confidence` object is about a third of each response) spent so the inverse-calibration finding stays verifiable with the shipped code. Deliberate trade-off; drop it if the finding is ever retired.
 - Currency-token and whitespace stripping applies to `MONEY_FIELDS`, not all of `NUMERIC_FIELDS`. The instruction said the latter; taken literally it would have turned `2026-01-31 19:10:00` into an unparseable timestamp and mangled invoice numbers containing spaces. Recorded as a case where the literal instruction would have introduced a bug and the narrower reading was right.
+- `validation_findings` in the audit log stores `{rule, severity, fields}` only. Section 8 originally said "JSON array of findings", which taken literally includes `Finding.message` — and messages quote VAT numbers and amounts, violating section 9. Second case, after `MONEY_FIELDS`, where the literal spec was wrong and the narrower reading was right.
+- The Postgres branch in `app/store.py` (`DATABASE_URL` set) is written but has never been executed: `psycopg` is deliberately not a dependency, and the branch raises a clear error naming it. SQLite is the supported store. Do not claim Postgres support in the README.
+- Append-only is enforced in application code, not at the database level. `app/store.py` contains no UPDATE or DELETE and a test scans the source for them; nothing stops a user with the SQLite file from deleting rows. A `BEFORE DELETE` trigger was deliberately not added because defining it would put `DELETE` in the module.
