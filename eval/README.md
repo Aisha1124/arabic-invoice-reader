@@ -121,10 +121,10 @@ Things learned by running an extractor over this set. They describe the model,
 not the data, and are recorded so nobody spends time "fixing" the rendering again.
 
 **Scope.** Everything below was measured with one model (`gpt-4o`, September 2026),
-on one invoice from this generator (INV-2026-1002, the 6-sample Arabic-Indic subset
-is where it applies), with `temperature=0`. It is a reproducible observation, not a
-general result about vision models, and it may not hold on other models, other
-fonts, or real scans.
+on this generator's 30 invoices (the Arabic-Indic finding rests on 6 of them, and
+the three-condition table on one), with `temperature=0`. It is a reproducible
+observation, not a general result about vision models, and it may not hold on
+other models, other fonts, or real scans. Full numbers: `results.md`.
 
 ### Multi-digit decimal amounts in Arabic-Indic numerals are misread
 
@@ -153,36 +153,41 @@ Three things follow from the table:
 2. **At `temperature=0` the wrong values are stable.** Agreement rose to 100% on
    most cells once the rendering was unambiguous: the model returns the same wrong
    number every time. This is systematic, not noise.
-3. **The internal control rules out the script and the font.** In the same runs,
-   on the same page, in the same numerals: single-digit quantities 45/45, the
-   printed date 9/9, the printed time 9/9, the invoice number 9/9, and the two
-   15-digit VAT numbers 17/18 (one run dropped a digit from the seller VAT, in the
-   Amiri header line). Multi-digit decimal amounts: 24/54, 17/54, 15/54 by
-   condition. The failure is specific to multi-digit values with a decimal
-   separator, not to Arabic-Indic digits generally.
+3. **The apparent control was confounded.** In the same runs, single-digit
+   quantities were 45/45, the date, time and invoice number 9/9 each, and the two
+   15-digit VAT numbers 17/18, which at first suggested the failure was specific
+   to multi-digit *decimal* amounts. The full evaluation (`results.md`) showed
+   otherwise: INV-2026-1002 is bilingual, and its English block prints the same
+   header values in Latin digits. On the two Arabic-only, Arabic-Indic invoices
+   (INV-2026-1003, INV-2026-1012) the invoice number, date and 15-digit VAT
+   number were wrong in 6 of 6 runs — a dropped digit, `٢٠٢٦` read as 2023,
+   `١٠٠٣` read as 1002. Single-digit quantities stayed 100%. The accurate
+   statement is: **multi-digit Arabic-Indic numbers are read unreliably; single
+   digits are fine; a bilingual layout hides the problem on any field that is
+   also printed in Latin digits.**
 
-Latin-numeral invoices in the same runs (INV-2026-1000, INV-2026-1001) had every
-amount correct. Report the 6 Arabic-Indic samples separately from the other 24;
-pooling them hides this.
+Latin-numeral invoices had every monetary value correct in every parseable run
+of the full evaluation (24 samples, 69 runs). Report the 6 Arabic-Indic samples
+separately from the other 24; pooling them hides this.
 
 ### The model's confidence scores do not predict its errors
 
-Measured by `run_eval.py`'s calibration report over INV-2026-1000/1001/1002,
-one run each, current rendering, 102 scored fields:
+Measured by `run_eval.py`'s calibration report over the full evaluation
+(30 invoices × 3 runs, 2,682 scored fields):
 
 ```
-mean confidence on correct fields:   0.977 (n=87)
-mean confidence on incorrect fields: 1.000 (n=15)
-incorrect fields scored >= threshold: 15/15
-correct fields scored < threshold:    2/87
+mean confidence on correct fields:   0.967 (n=2483)
+mean confidence on incorrect fields: 1.000 (n=199)
+incorrect fields scored >= threshold: 199/199
+correct fields scored < threshold:    83/2483
 ```
 
-Every wrong value carried a score of 1.0. The only scores below 1.0 were 0.0 on
-fields the model returned as `null` (a simplified invoice's absent buyer), which
-were correct. Across every run in this repo the scores have been 1.0 or 0.0 with
-one exception (0.9). On this evidence the confidence threshold flags nullness,
-not risk; what actually catches the misreads above is arithmetic validation, which
-flagged every one of them as a `line_total`/`vat_amount`/`subtotal` inconsistency.
+Every wrong value carried a score of 1.0. Every sub-threshold score was on a
+correct field, almost all of them 0.0 on fields correctly returned as `null`.
+On this evidence the confidence score flags nullness, not risk. What actually
+catches the misreads is arithmetic validation: all 15 runs containing a wrong
+monetary value carried an `error`-severity finding. The score is still requested
+and recorded so this measurement can be repeated.
 
 ## Regenerating
 
