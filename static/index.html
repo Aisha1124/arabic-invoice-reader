@@ -1,0 +1,144 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Invoice Reader</title>
+<style>
+  body { font-family: system-ui, sans-serif; margin: 2rem; max-width: 70rem; }
+  table { border-collapse: collapse; margin: 1rem 0; width: 100%; }
+  th, td { border: 1px solid #999; padding: 0.3rem 0.5rem; text-align: left; vertical-align: top; }
+  th { background: #eee; }
+  td[dir="auto"] { unicode-bidi: plaintext; }
+  .flagged { background: #fde8e8; }
+  .flagged input { width: 100%; box-sizing: border-box; background: #fff4f4; border: 1px solid #c00; font: inherit; }
+  .error { color: #a00; white-space: pre-wrap; }
+  .status-ok { color: #060; }
+  .status-review { color: #a00; }
+  .note { font-size: 0.9rem; color: #444; border-left: 3px solid #999; padding-left: 0.6rem; }
+  li.error { list-style: "✖ "; }
+  li.warning { list-style: "△ "; color: #640; }
+</style>
+</head>
+<body>
+<h1>Invoice Reader</h1>
+<p>Upload a PNG or JPEG of a Saudi tax invoice. Fields are extracted, validated against ZATCA arithmetic and structure rules, and logged for audit without their content.</p>
+<p><input type="file" id="file" accept="image/png,image/jpeg"> <span id="busy"></span></p>
+<div id="error" class="error"></div>
+<div id="result" hidden>
+  <h2>Status: <span id="status"></span></h2>
+  <h3>Invoice</h3>
+  <table><tbody id="header"></tbody></table>
+  <h3>Line items</h3>
+  <table>
+    <thead><tr><th>#</th><th>Description</th><th>Quantity</th><th>Unit price</th><th>Line total</th><th>VAT rate</th><th>VAT amount</th></tr></thead>
+    <tbody id="lines"></tbody>
+  </table>
+  <h3>Findings</h3>
+  <ul id="findings"></ul>
+  <p class="note">Highlighted cells appear in an arithmetic finding and are editable for correction. On invoices printed with Arabic-Indic numerals (٠١٢٣٤٥٦٧٨٩) the model reads multi-digit amounts unreliably; the arithmetic findings are the signal to trust, not the absence of a highlight.</p>
+</div>
+
+<script>
+const HEADER_FIELDS = [
+  ["invoice_number", "Invoice number"], ["invoice_date", "Date"], ["invoice_timestamp", "Timestamp"],
+  ["invoice_type", "Type"], ["seller_name", "Seller"], ["seller_vat_number", "Seller VAT"],
+  ["buyer_name", "Buyer"], ["buyer_vat_number", "Buyer VAT"], ["subtotal", "Subtotal"],
+  ["vat_total", "VAT total"], ["total", "Total"], ["currency", "Currency"],
+];
+const LINE_FIELDS = ["description", "quantity", "unit_price", "line_total", "vat_rate", "vat_amount"];
+
+document.getElementById("file").addEventListener("change", async (event) => {
+  const file = event.target.files[0];
+  if (!file) return;
+  const errorBox = document.getElementById("error");
+  const busy = document.getElementById("busy");
+  errorBox.textContent = "";
+  document.getElementById("result").hidden = true;
+  busy.textContent = "Extracting…";
+  try {
+    // Raw-body contract: the file's bytes are the body, its MIME type is the Content-Type.
+    const response = await fetch("/extract", {
+      method: "POST",
+      headers: { "Content-Type": file.type || "application/octet-stream" },
+      body: file,
+    });
+    const text = await response.text();
+    if (!response.ok) {
+      errorBox.textContent = `HTTP ${response.status}\n${text}`;
+      return;
+    }
+    render(JSON.parse(text));
+  } catch (err) {
+    errorBox.textContent = `Request failed: ${err.message}`;
+  } finally {
+    busy.textContent = "";
+  }
+});
+
+function render(result) {
+  const flagged = new Set(
+    result.findings.filter((f) => f.severity === "error").flatMap((f) => f.fields)
+  );
+  const status = document.getElementById("status");
+  status.textContent = result.status;
+  status.className = result.status === "ok" ? "status-ok" : "status-review";
+
+  const header = document.getElementById("header");
+  header.replaceChildren();
+  for (const [key, label] of HEADER_FIELDS) {
+    const row = document.createElement("tr");
+    const th = document.createElement("th");
+    th.textContent = label;
+    row.append(th, valueCell(result.invoice[key], flagged.has(key)));
+    header.append(row);
+  }
+
+  const lines = document.getElementById("lines");
+  lines.replaceChildren();
+  result.invoice.line_items.forEach((line, i) => {
+    const row = document.createElement("tr");
+    const index = document.createElement("td");
+    index.textContent = i + 1;
+    row.append(index);
+    for (const key of LINE_FIELDS) {
+      row.append(valueCell(line[key], flagged.has(`line_items[${i}].${key}`)));
+    }
+    lines.append(row);
+  });
+
+  const findings = document.getElementById("findings");
+  findings.replaceChildren();
+  if (result.findings.length === 0) {
+    const li = document.createElement("li");
+    li.textContent = "None. The extraction is internally consistent; that is not the same as verified.";
+    findings.append(li);
+  }
+  for (const f of result.findings) {
+    const li = document.createElement("li");
+    li.className = f.severity;
+    li.textContent = `[${f.severity}] ${f.rule}: ${f.message}`;
+    findings.append(li);
+  }
+  document.getElementById("result").hidden = false;
+}
+
+function valueCell(value, isFlagged) {
+  const td = document.createElement("td");
+  // dir=auto lets each cell take its direction from its own first strong character,
+  // so Arabic renders right-to-left inside a left-to-right table.
+  td.dir = "auto";
+  const text = value === null || value === undefined ? "" : String(value);
+  if (isFlagged) {
+    td.className = "flagged";
+    const input = document.createElement("input");
+    input.value = text;
+    input.dir = "auto";
+    td.append(input);
+  } else {
+    td.textContent = text;
+  }
+  return td;
+}
+</script>
+</body>
+</html>
