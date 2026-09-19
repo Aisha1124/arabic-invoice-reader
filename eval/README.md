@@ -189,6 +189,34 @@ catches the misreads is arithmetic validation: all 15 runs containing a wrong
 monetary value carried an `error`-severity finding. The score is still requested
 and recorded so this measurement can be repeated.
 
+### A hallucinated field that nothing in this architecture can catch
+
+INV-2026-1017 is a simplified invoice with no buyer. In all three runs of the
+full evaluation the model returned the seller's city, `المدينة المنورة`, as
+`buyer_name`, with confidence 1.0. Ground truth is `null`.
+
+Every safeguard in this pipeline misses it, for a reason each:
+
+- **Arithmetic validation** only sees numbers; a name is not in any sum.
+- **Confidence gating** (were it still on) would pass it: the score was 1.0.
+- **Structural rules** do not apply: a simplified invoice legitimately has no
+  buyer, `buyer_vat_number` was correctly `null`, and nothing requires
+  `buyer_name` to be null when the VAT number is.
+
+This is the one error class observed in this repo that reaches the output with
+no flag at all: a plausible value invented for an absent field. It is a limit of
+validation-by-consistency, not a bug to fix. Catching it would need a second,
+independent read (another model or a second pass) or a human. Reviewers should
+know that "no findings" means "internally consistent", not "verified".
+
+### A malformed confidence object
+
+In one run of 90 (INV-2026-1025, run 1) the model returned a `confidence` object
+whose keys matched none of the field paths the prompt specifies. The invoice
+fields in that run were all correct. `run_eval.py` reports such fields as "no
+score from the model" and excludes them from the calibration means. One
+occurrence; recorded so it is not mistaken for a scoring bug if it recurs.
+
 ## Regenerating
 
 ```bash
