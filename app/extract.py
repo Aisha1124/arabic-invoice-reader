@@ -69,6 +69,24 @@ Include fields you set to null."""
 # (usually Z or +03:00) is invented, so it is removed before parsing.
 TIMEZONE_SUFFIX = re.compile(r"(Z|[+-]\d{2}:?\d{2})$")
 ARABIC_INDIC = str.maketrans("٠١٢٣٤٥٦٧٨٩۰۱۲۳۴۵۶۷۸۹٫٬", "01234567890123456789.,")
+# Amounts sometimes come back as printed: "SAR 11897.50", "5 456.34 ريال". The
+# currency token and any whitespace thousands separator are removed before parsing.
+# Not applied to invoice_number or the timestamp, where whitespace is meaningful.
+MONEY_FIELDS = frozenset(
+    {
+        "quantity",
+        "unit_price",
+        "line_total",
+        "vat_rate",
+        "vat_amount",
+        "subtotal",
+        "vat_total",
+        "total",
+    }
+)
+CURRENCY_TOKEN = re.compile(
+    r"^\s*(?:SAR|ر\.س\.?|ريال)\s*|\s*(?:SAR|ر\.س\.?|ريال)\s*$", re.IGNORECASE
+)
 # Free text (description, names) is left verbatim: changing its digits alters content.
 NUMERIC_FIELDS = frozenset(
     {
@@ -235,9 +253,13 @@ def _metadata(model: str, record: dict[str, Any], cache_hit: bool) -> CallMetada
 
 
 def normalise_digits(invoice: dict[str, Any]) -> dict[str, Any]:
-    """Map Arabic-Indic digits and separators to ASCII in NUMERIC_FIELDS only."""
+    """Map Arabic-Indic digits and separators to ASCII in NUMERIC_FIELDS only, and
+    drop currency tokens and whitespace from MONEY_FIELDS."""
 
     def fix(key: str, value: Any) -> Any:
+        if key in MONEY_FIELDS and isinstance(value, str):
+            value = CURRENCY_TOKEN.sub("", value.translate(ARABIC_INDIC))
+            return "".join(value.split())
         if key in NUMERIC_FIELDS and isinstance(value, str):
             return value.translate(ARABIC_INDIC)
         if key == "line_items" and isinstance(value, list):

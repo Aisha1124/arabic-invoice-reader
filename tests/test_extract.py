@@ -262,6 +262,50 @@ def test_timezone_suffix_is_stripped_from_timestamp(suffix: str) -> None:
     assert invoice.invoice_timestamp.tzinfo is None
 
 
+@pytest.mark.parametrize(
+    ("printed", "expected"),
+    [
+        ("SAR 11897.50", "11897.50"),
+        ("SAR 5 456.34", "5456.34"),
+        ("11897.50 SAR", "11897.50"),
+        ("sar 1,234.50", "1234.50"),
+        ("ر.س 5 456.34", "5456.34"),
+        ("5 456.34 ر.س.", "5456.34"),
+        ("ريال ٥ ٤٥٦٫٣٤", "5456.34"),
+        ("٥٬٤٥٦٫٣٤ ريال", "5456.34"),
+        ("1\u00a0234\u202f567.89", "1234567.89"),
+    ],
+)
+def test_money_fields_drop_currency_tokens_and_spaces(
+    printed: str, expected: str
+) -> None:
+    payload = json.loads(ENGLISH)
+    payload["invoice"]["total"] = printed
+    payload["invoice"]["line_items"][0]["unit_price"] = printed
+    invoice, _ = parse_response(json.dumps(payload))
+
+    assert invoice.total == Decimal(expected)
+    assert invoice.line_items[0].unit_price == Decimal(expected)
+
+
+def test_currency_stripping_leaves_text_and_identifiers_alone() -> None:
+    fixed = normalise_digits(
+        {
+            "invoice_number": "SAR 2026 001",
+            "invoice_timestamp": "2026-01-31 19:10:00",
+            "seller_name": "SAR Trading",
+            "line_items": [
+                {"description": "SAR 5 metre cable", "total": "SAR 5 456.34"}
+            ],
+        }
+    )
+    assert fixed["invoice_number"] == "SAR 2026 001"
+    assert fixed["invoice_timestamp"] == "2026-01-31 19:10:00"
+    assert fixed["seller_name"] == "SAR Trading"
+    assert fixed["line_items"][0]["description"] == "SAR 5 metre cable"
+    assert fixed["line_items"][0]["total"] == "5456.34"
+
+
 def test_normalise_digits_touches_numeric_fields_only() -> None:
     assert normalise_digits(
         {
