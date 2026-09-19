@@ -9,7 +9,7 @@ from pathlib import Path
 import pytest
 
 from app import store
-from app.schema import CallMetadata, Invoice, LineItem
+from app.schema import CallMetadata, ExtractionResult, Invoice, LineItem
 from app.store import AuditRow, audit_row, read_last, write_audit
 from app.validate import validate
 
@@ -37,7 +37,7 @@ def _metadata(**overrides: object) -> CallMetadata:
     return CallMetadata(**values)
 
 
-def _result():
+def _result() -> ExtractionResult:
     """A result whose findings quote content: a bad VAT number and a wrong total."""
     invoice = Invoice(
         invoice_number="INV-2026-1000",

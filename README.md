@@ -104,7 +104,7 @@ The 30 sample images are not committed. To regenerate them byte-for-byte
 (the set is seeded; this was checked against the evaluated images):
 
 ```bash
-.venv/bin/pip install pillow arabic-reshaper python-bidi qrcode   # generator only
+.venv/bin/pip install -r requirements-eval.txt   # generator only
 cd eval && ../.venv/bin/python generate_invoices.py && mv out/samples samples && rm -r out && cd ..
 .venv/bin/python -m eval.load_data       # prints the dataset summary
 ```
@@ -136,8 +136,8 @@ values are the same wrong values every run. Bilingual invoices hide the problem
 on any field that is also printed in Latin digits.
 
 **2. The model's confidence scores are inversely calibrated, so the gate was
-removed.** Over 2,802 scored fields: mean 0.969 on correct fields, 1.000 on
-incorrect ones. 193 of 193 errors sat above the 0.80 threshold; all 81
+removed.** Mean confidence was 0.969 on the 2,609 correct fields and 1.000 on
+the 193 incorrect ones. 193 of 193 errors sat above the 0.80 threshold; all 81
 sub-threshold scores were on correct fields (mostly `0.0` on correctly-null
 fields). Nothing in the app acts on confidence now; `needs_review` comes from
 findings alone. Arithmetic validation is what catches misreads: 15 of 15 runs

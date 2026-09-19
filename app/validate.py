@@ -30,48 +30,44 @@ def _is_lumped_vat(invoice: Invoice) -> bool:
     )
 
 
+def _check_line_total(prefix: str, line: LineItem) -> Finding | None:
+    expected = line.quantity * line.unit_price
+    if _within_tolerance(expected, line.line_total):
+        return None
+    return Finding(
+        rule="line_total_equals_quantity_times_unit_price",
+        severity="error",
+        message=(
+            f"{prefix}: quantity {line.quantity} × unit_price {line.unit_price}"
+            f" = {expected}, but line_total is {line.line_total}"
+        ),
+        fields=[f"{prefix}.quantity", f"{prefix}.unit_price", f"{prefix}.line_total"],
+    )
+
+
+def _check_line_vat(prefix: str, line: LineItem) -> Finding | None:
+    expected = line.line_total * line.vat_rate
+    if _within_tolerance(expected, line.vat_amount):
+        return None
+    return Finding(
+        rule="vat_amount_equals_line_total_times_vat_rate",
+        severity="error",
+        message=(
+            f"{prefix}: line_total {line.line_total} × vat_rate {line.vat_rate}"
+            f" = {expected}, but vat_amount is {line.vat_amount}"
+        ),
+        fields=[f"{prefix}.line_total", f"{prefix}.vat_rate", f"{prefix}.vat_amount"],
+    )
+
+
 def _check_line_arithmetic(
     index: int, line: LineItem, check_vat: bool
 ) -> list[Finding]:
     prefix = f"line_items[{index}]"
-    findings: list[Finding] = []
-    expected_total = line.quantity * line.unit_price
-    if not _within_tolerance(expected_total, line.line_total):
-        findings.append(
-            Finding(
-                rule="line_total_equals_quantity_times_unit_price",
-                severity="error",
-                message=(
-                    f"{prefix}: quantity {line.quantity} × unit_price {line.unit_price}"
-                    f" = {expected_total}, but line_total is {line.line_total}"
-                ),
-                fields=[
-                    f"{prefix}.quantity",
-                    f"{prefix}.unit_price",
-                    f"{prefix}.line_total",
-                ],
-            )
-        )
-    if not check_vat:
-        return findings
-    expected_vat = line.line_total * line.vat_rate
-    if not _within_tolerance(expected_vat, line.vat_amount):
-        findings.append(
-            Finding(
-                rule="vat_amount_equals_line_total_times_vat_rate",
-                severity="error",
-                message=(
-                    f"{prefix}: line_total {line.line_total} × vat_rate {line.vat_rate}"
-                    f" = {expected_vat}, but vat_amount is {line.vat_amount}"
-                ),
-                fields=[
-                    f"{prefix}.line_total",
-                    f"{prefix}.vat_rate",
-                    f"{prefix}.vat_amount",
-                ],
-            )
-        )
-    return findings
+    checks = [_check_line_total(prefix, line)]
+    if check_vat:
+        checks.append(_check_line_vat(prefix, line))
+    return [f for f in checks if f is not None]
 
 
 def _check_sums_against_lines(invoice: Invoice, check_vat: bool) -> list[Finding]:

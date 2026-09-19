@@ -70,7 +70,8 @@ arabic-invoice-reader/
 ├── README.md
 ├── .env.example
 ├── .gitignore
-├── requirements.txt
+├── requirements.txt       # what the app runs
+├── requirements-eval.txt  # generator only (pillow, arabic-reshaper, python-bidi, qrcode)
 ├── ruff.toml          # excludes vendored eval/generate_invoices.py and *.md
 ├── app/
 │   ├── __init__.py
@@ -87,14 +88,20 @@ arabic-invoice-reader/
 │   ├── ground_truth.json      # exact field values
 │   ├── README.md              # dataset documentation
 │   ├── generate_invoices.py   # regenerates the set
+│   ├── results.md             # full evaluation output and analysis
 │   ├── fonts/                 # Arabic fonts for the generator
 │   ├── load_data.py           # reads and validates the set
 │   └── run_eval.py            # accuracy measurement
 ├── tests/
 │   ├── __init__.py      # makes the repo root importable under pytest
+│   ├── fixtures/        # recorded model responses
 │   ├── test_schema.py
 │   ├── test_validate.py
-│   └── test_extract.py
+│   ├── test_extract.py
+│   ├── test_cache.py
+│   ├── test_store.py
+│   ├── test_load_data.py
+│   └── test_run_eval.py
 └── docs/
     └── data-flow.md     # PDPL data-flow note
 ```

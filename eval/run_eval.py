@@ -285,7 +285,7 @@ def _planned_calls(samples: list[Sample], repeats: int, use_cache: bool) -> int:
     )
 
 
-def main(argv: list[str] | None = None) -> int:
+def _parse_args(argv: list[str] | None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
         "--repeats", type=int, default=1, help="runs per image (>1 disables cache)"
@@ -307,18 +307,26 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
     if args.repeats < 1:
         parser.error("--repeats must be at least 1")
-    samples = load_samples()
     if args.files:
-        known = {s.meta.file: s for s in samples}
+        known = {s.meta.file for s in load_samples()}
         unknown = [f for f in args.files if f not in known]
         if unknown:
             parser.error(f"not in ground truth: {', '.join(unknown)}")
-        samples = [known[f] for f in args.files]
+    return args
+
+
+def main(argv: list[str] | None = None) -> int:
+    args = _parse_args(argv)
+    samples = load_samples()
+    if args.files:
+        by_file = {s.meta.file: s for s in samples}
+        samples = [by_file[f] for f in args.files]
     use_cache = not args.no_cache and args.repeats == 1
     planned = _planned_calls(samples, args.repeats, use_cache)
     if planned > MAX_UNCONFIRMED_CALLS and not args.confirm_spend:
         print(
-            f"this run would make {planned} API calls (limit {MAX_UNCONFIRMED_CALLS} without --confirm-spend); stopping",
+            f"this run would make {planned} API calls (limit {MAX_UNCONFIRMED_CALLS}"
+            " without --confirm-spend); stopping",
             file=sys.stderr,
         )
         return 2
