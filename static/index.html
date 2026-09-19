@@ -2,59 +2,210 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Invoice Reader</title>
 <style>
-  body { font-family: system-ui, sans-serif; margin: 2rem; max-width: 70rem; }
-  table { border-collapse: collapse; margin: 1rem 0; width: 100%; }
-  th, td { border: 1px solid #999; padding: 0.3rem 0.5rem; text-align: left; vertical-align: top; }
-  th { background: #eee; }
+  :root {
+    --accent: #1f5fbf;
+    --ink: #1c1f24;
+    --muted: #5d6470;
+    --line: #d9dde3;
+    --surface: #ffffff;
+    --surface-alt: #f6f7f9;
+    --ok: #1e7f4f;
+    --ok-bg: #e6f4ec;
+    --warn: #a56a00;
+    --warn-bg: #fff4dc;
+    --err: #b3261e;
+    --err-bg: #fbe9e7;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    color: var(--ink);
+    background: var(--surface-alt);
+    font: 15px/1.5 system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  }
+  main { max-width: 1100px; margin: 0 auto; padding: 40px 32px 64px; }
+  header { margin-bottom: 28px; }
+  h1 { font-size: 28px; font-weight: 650; margin: 0 0 6px; letter-spacing: -0.01em; }
+  header p { margin: 0; color: var(--muted); font-size: 16px; }
+  h2 { font-size: 13px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.06em; color: var(--muted); margin: 32px 0 12px; }
+  section.block { background: var(--surface); border: 1px solid var(--line); border-radius: 8px; padding: 20px 24px; }
+
+  /* Drop zone */
+  #drop {
+    border: 2px dashed var(--line);
+    border-radius: 10px;
+    background: var(--surface);
+    padding: 36px 24px;
+    text-align: center;
+    cursor: pointer;
+    transition: border-color 120ms, background 120ms;
+  }
+  #drop:hover, #drop.over { border-color: var(--accent); background: #eef3fb; }
+  #drop strong { color: var(--accent); }
+  #drop .hint { color: var(--muted); font-size: 13px; margin-top: 6px; }
+  #drop .chosen { margin-top: 12px; font-size: 14px; color: var(--ink); }
+  #drop .chosen code { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 13px; }
+  #file { display: none; }
+
+  /* Loading and error */
+  #busy { display: none; align-items: center; gap: 12px; margin-top: 16px; color: var(--muted); }
+  #busy.on { display: flex; }
+  .spinner {
+    width: 18px; height: 18px; border-radius: 50%;
+    border: 2px solid var(--line); border-top-color: var(--accent);
+    animation: spin 0.8s linear infinite;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  #error { display: none; margin-top: 16px; border: 1px solid var(--err); border-left-width: 4px; background: var(--err-bg); border-radius: 6px; padding: 14px 16px; }
+  #error.on { display: block; }
+  #error .code { font-weight: 600; color: var(--err); margin-bottom: 4px; }
+  #error pre { margin: 0; white-space: pre-wrap; word-break: break-word; font: 13px/1.45 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
+
+  /* Summary cards */
+  .cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 12px; }
+  .card { background: var(--surface); border: 1px solid var(--line); border-radius: 8px; padding: 14px 16px; }
+  .card .label { font-size: 12px; text-transform: uppercase; letter-spacing: 0.05em; color: var(--muted); }
+  .card .value { font-size: 22px; font-weight: 600; margin-top: 4px; font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
+  .card.status-ok { background: var(--ok-bg); border-color: var(--ok); }
+  .card.status-ok .value { color: var(--ok); }
+  .card.status-review { background: var(--warn-bg); border-color: var(--warn); }
+  .card.status-review .value { color: var(--warn); }
+
+  /* Findings */
+  .findings { display: grid; gap: 10px; }
+  .finding { border: 1px solid var(--line); border-left-width: 4px; border-radius: 6px; padding: 12px 14px; background: var(--surface); }
+  .finding.error { border-left-color: var(--err); }
+  .finding.warning { border-left-color: var(--warn); }
+  .finding .head { display: flex; align-items: center; gap: 10px; margin-bottom: 4px; }
+  .finding code { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 13px; }
+  .tag { font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em; padding: 2px 7px; border-radius: 4px; }
+  .tag.error { color: var(--err); background: var(--err-bg); }
+  .tag.warning { color: var(--warn); background: var(--warn-bg); }
+  .finding .msg { color: var(--muted); font-size: 14px; }
+  .none { color: var(--muted); }
+
+  /* Tables */
+  table { border-collapse: collapse; width: 100%; }
+  th, td { padding: 10px 12px; text-align: left; vertical-align: top; border-bottom: 1px solid var(--line); }
+  thead th { background: var(--surface-alt); font-size: 12px; text-transform: uppercase; letter-spacing: 0.05em; color: var(--muted); border-bottom: 2px solid var(--line); }
+  tbody tr:last-child td { border-bottom: none; }
+  #lines tbody tr:nth-child(even) { background: var(--surface-alt); }
+  th.key { width: 220px; font-weight: 600; color: var(--muted); font-size: 14px; }
   td[dir="auto"] { unicode-bidi: plaintext; }
-  .flagged { background: #fde8e8; }
-  .flagged input { width: 100%; box-sizing: border-box; background: #fff4f4; border: 1px solid #c00; font: inherit; }
-  .error { color: #a00; white-space: pre-wrap; }
-  .status-ok { color: #060; }
-  .status-review { color: #a00; }
-  .note { font-size: 0.9rem; color: #444; border-left: 3px solid #999; padding-left: 0.6rem; }
-  li.error { list-style: "✖ "; }
-  li.warning { list-style: "△ "; color: #640; }
+  td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
+  td.num input { text-align: right; }
+  td.flagged { background: var(--warn-bg); box-shadow: inset 3px 0 0 var(--warn); }
+  td.flagged input {
+    width: 100%; font: inherit; font-variant-numeric: inherit; color: inherit;
+    background: transparent; border: none; border-bottom: 1px solid var(--warn); padding: 0; outline: none;
+  }
+  td.flagged input:focus { border-bottom-color: var(--accent); }
+
+  .footnote { margin-top: 20px; font-size: 13px; color: var(--muted); border-top: 1px solid var(--line); padding-top: 12px; }
+  .footnote span { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
 </style>
 </head>
 <body>
-<h1>Invoice Reader</h1>
-<p>Upload a PNG or JPEG of a Saudi tax invoice. Fields are extracted, validated against ZATCA arithmetic and structure rules, and logged for audit without their content.</p>
-<p><input type="file" id="file" accept="image/png,image/jpeg"> <span id="busy"></span></p>
-<div id="error" class="error"></div>
-<div id="result" hidden>
-  <h2>Status: <span id="status"></span></h2>
-  <h3>Invoice</h3>
-  <table><tbody id="header"></tbody></table>
-  <h3>Line items</h3>
-  <table>
-    <thead><tr><th>#</th><th>Description</th><th>Quantity</th><th>Unit price</th><th>Line total</th><th>VAT rate</th><th>VAT amount</th></tr></thead>
-    <tbody id="lines"></tbody>
-  </table>
-  <h3>Findings</h3>
-  <ul id="findings"></ul>
-  <p class="note">Highlighted cells appear in an arithmetic finding and are editable for correction. On invoices printed with Arabic-Indic numerals (٠١٢٣٤٥٦٧٨٩) the model reads multi-digit amounts unreliably; the arithmetic findings are the signal to trust, not the absence of a highlight.</p>
-</div>
+<main>
+  <header>
+    <h1>Invoice Reader</h1>
+    <p>Extracts Saudi tax invoices to structured fields, checks them against ZATCA arithmetic and structure rules, and logs each extraction without its content.</p>
+  </header>
+
+  <div id="drop" tabindex="0" role="button" aria-label="Choose an invoice image">
+    <div><strong>Choose an image</strong> or drag it here</div>
+    <div class="hint">PNG or JPEG, up to 10 MB</div>
+    <div class="chosen" id="chosen"></div>
+  </div>
+  <input type="file" id="file" accept="image/png,image/jpeg">
+  <div id="busy"><div class="spinner"></div><span id="busy-text"></span></div>
+  <div id="error"><div class="code" id="error-code"></div><pre id="error-body"></pre></div>
+
+  <div id="result" hidden>
+    <h2>Summary</h2>
+    <div class="cards">
+      <div class="card" id="card-status"><div class="label">Status</div><div class="value" id="v-status"></div></div>
+      <div class="card"><div class="label">Fields extracted</div><div class="value" id="v-extracted"></div></div>
+      <div class="card"><div class="label">Fields flagged</div><div class="value" id="v-flagged"></div></div>
+      <div class="card"><div class="label">Model</div><div class="value" id="v-model"></div></div>
+      <div class="card"><div class="label">Latency</div><div class="value" id="v-latency"></div></div>
+      <div class="card"><div class="label">Source</div><div class="value" id="v-source"></div></div>
+    </div>
+
+    <h2>Findings</h2>
+    <div class="findings" id="findings"></div>
+
+    <h2>Invoice fields</h2>
+    <section class="block">
+      <table><tbody id="header"></tbody></table>
+    </section>
+
+    <h2>Line items</h2>
+    <section class="block">
+      <table id="lines">
+        <thead><tr>
+          <th class="num">#</th><th>Description</th><th class="num">Quantity</th><th class="num">Unit price</th>
+          <th class="num">Line total</th><th class="num">VAT rate</th><th class="num">VAT amount</th>
+        </tr></thead>
+        <tbody></tbody>
+      </table>
+      <p class="footnote">Highlighted cells appear in an arithmetic finding and can be edited. On invoices printed with Arabic-Indic numerals <span>٠١٢٣٤٥٦٧٨٩</span> the model reads multi-digit amounts unreliably; the arithmetic findings are the signal to trust, not the absence of a highlight.</p>
+    </section>
+  </div>
+</main>
 
 <script>
 const HEADER_FIELDS = [
-  ["invoice_number", "Invoice number"], ["invoice_date", "Date"], ["invoice_timestamp", "Timestamp"],
-  ["invoice_type", "Type"], ["seller_name", "Seller"], ["seller_vat_number", "Seller VAT"],
-  ["buyer_name", "Buyer"], ["buyer_vat_number", "Buyer VAT"], ["subtotal", "Subtotal"],
-  ["vat_total", "VAT total"], ["total", "Total"], ["currency", "Currency"],
+  ["invoice_number", "Invoice number", false], ["invoice_date", "Date", false], ["invoice_timestamp", "Timestamp", false],
+  ["invoice_type", "Type", false], ["seller_name", "Seller", false], ["seller_vat_number", "Seller VAT", true],
+  ["buyer_name", "Buyer", false], ["buyer_vat_number", "Buyer VAT", true], ["subtotal", "Subtotal", true],
+  ["vat_total", "VAT total", true], ["total", "Total", true], ["currency", "Currency", false],
 ];
-const LINE_FIELDS = ["description", "quantity", "unit_price", "line_total", "vat_rate", "vat_amount"];
+const LINE_FIELDS = [["description", false], ["quantity", true], ["unit_price", true], ["line_total", true], ["vat_rate", true], ["vat_amount", true]];
 
-document.getElementById("file").addEventListener("change", async (event) => {
-  const file = event.target.files[0];
-  if (!file) return;
-  const errorBox = document.getElementById("error");
+const drop = document.getElementById("drop");
+const fileInput = document.getElementById("file");
+drop.addEventListener("click", () => fileInput.click());
+drop.addEventListener("keydown", (e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); fileInput.click(); } });
+drop.addEventListener("dragover", (e) => { e.preventDefault(); drop.classList.add("over"); });
+drop.addEventListener("dragleave", () => drop.classList.remove("over"));
+drop.addEventListener("drop", (e) => {
+  e.preventDefault();
+  drop.classList.remove("over");
+  const file = e.dataTransfer.files[0];
+  if (file) submit(file);
+});
+fileInput.addEventListener("change", () => { if (fileInput.files[0]) submit(fileInput.files[0]); });
+
+let timer = null;
+function setBusy(on) {
   const busy = document.getElementById("busy");
-  errorBox.textContent = "";
+  const text = document.getElementById("busy-text");
+  clearInterval(timer);
+  busy.classList.toggle("on", on);
+  if (!on) return;
+  const started = Date.now();
+  text.textContent = "Extracting… 0 s";
+  timer = setInterval(() => { text.textContent = `Extracting… ${Math.round((Date.now() - started) / 1000)} s`; }, 500);
+}
+
+function showError(code, body) {
+  document.getElementById("error-code").textContent = code;
+  document.getElementById("error-body").textContent = body;
+  document.getElementById("error").classList.add("on");
+}
+
+async function submit(file) {
+  document.getElementById("chosen").innerHTML = "";
+  const chosen = document.createElement("code");
+  chosen.textContent = `${file.name} · ${(file.size / 1024).toFixed(0)} KB`;
+  document.getElementById("chosen").append(chosen);
+  document.getElementById("error").classList.remove("on");
   document.getElementById("result").hidden = true;
-  busy.textContent = "Extracting…";
+  setBusy(true);
   try {
     // Raw-body contract: the file's bytes are the body, its MIME type is the Content-Type.
     const response = await fetch("/extract", {
@@ -64,75 +215,112 @@ document.getElementById("file").addEventListener("change", async (event) => {
     });
     const text = await response.text();
     if (!response.ok) {
-      errorBox.textContent = `HTTP ${response.status}\n${text}`;
+      showError(`HTTP ${response.status}`, text);
       return;
     }
-    render(JSON.parse(text));
+    render(JSON.parse(text), await auditRow(file));
   } catch (err) {
-    errorBox.textContent = `Request failed: ${err.message}`;
+    showError("Request failed", err.message);
   } finally {
-    busy.textContent = "";
+    setBusy(false);
   }
-});
+}
 
-function render(result) {
-  const flagged = new Set(
-    result.findings.filter((f) => f.severity === "error").flatMap((f) => f.fields)
-  );
-  const status = document.getElementById("status");
-  status.textContent = result.status;
-  status.className = result.status === "ok" ? "status-ok" : "status-review";
-
-  const header = document.getElementById("header");
-  header.replaceChildren();
-  for (const [key, label] of HEADER_FIELDS) {
-    const row = document.createElement("tr");
-    const th = document.createElement("th");
-    th.textContent = label;
-    row.append(th, valueCell(result.invoice[key], flagged.has(key)));
-    header.append(row);
+// The response carries the extraction; model, latency and cache status are on the
+// audit row written for it. Match by the image's SHA-256, which the browser can compute.
+async function auditRow(file) {
+  try {
+    const digest = await crypto.subtle.digest("SHA-256", await file.arrayBuffer());
+    const hash = Array.from(new Uint8Array(digest)).map((b) => b.toString(16).padStart(2, "0")).join("");
+    const rows = await (await fetch("/audit")).json();
+    return rows.find((r) => r.image_sha256 === hash) || null;
+  } catch {
+    return null;
   }
+}
 
-  const lines = document.getElementById("lines");
-  lines.replaceChildren();
-  result.invoice.line_items.forEach((line, i) => {
-    const row = document.createElement("tr");
-    const index = document.createElement("td");
-    index.textContent = i + 1;
-    row.append(index);
-    for (const key of LINE_FIELDS) {
-      row.append(valueCell(line[key], flagged.has(`line_items[${i}].${key}`)));
-    }
-    lines.append(row);
-  });
+function render(result, audit) {
+  const flagged = new Set(result.findings.filter((f) => f.severity === "error").flatMap((f) => f.fields));
+  const allFlagged = new Set(result.findings.flatMap((f) => f.fields));
+  const inv = result.invoice;
+
+  const extracted = HEADER_FIELDS.filter(([k]) => inv[k] !== null && inv[k] !== undefined).length + inv.line_items.length * LINE_FIELDS.length;
+  setText("v-status", result.status === "ok" ? "OK" : "Needs review");
+  document.getElementById("card-status").className = "card " + (result.status === "ok" ? "status-ok" : "status-review");
+  setText("v-extracted", extracted);
+  setText("v-flagged", allFlagged.size);
+  setText("v-model", audit ? audit.model : "—");
+  setText("v-latency", audit ? `${(audit.latency_ms / 1000).toFixed(1)} s` : "—");
+  setText("v-source", audit ? (audit.cache_hit ? "Cache" : "Live call") : "—");
 
   const findings = document.getElementById("findings");
   findings.replaceChildren();
   if (result.findings.length === 0) {
-    const li = document.createElement("li");
-    li.textContent = "None. The extraction is internally consistent; that is not the same as verified.";
-    findings.append(li);
+    const p = document.createElement("div");
+    p.className = "none";
+    p.textContent = "No findings. The extraction is internally consistent, which is not the same as verified.";
+    findings.append(p);
   }
   for (const f of result.findings) {
-    const li = document.createElement("li");
-    li.className = f.severity;
-    li.textContent = `[${f.severity}] ${f.rule}: ${f.message}`;
-    findings.append(li);
+    const card = document.createElement("div");
+    card.className = `finding ${f.severity}`;
+    const head = document.createElement("div");
+    head.className = "head";
+    const rule = document.createElement("code");
+    rule.textContent = f.rule;
+    const tag = document.createElement("span");
+    tag.className = `tag ${f.severity}`;
+    tag.textContent = f.severity;
+    head.append(rule, tag);
+    const msg = document.createElement("div");
+    msg.className = "msg";
+    msg.textContent = f.message;
+    card.append(head, msg);
+    findings.append(card);
   }
+
+  const header = document.getElementById("header");
+  header.replaceChildren();
+  for (const [key, label, numeric] of HEADER_FIELDS) {
+    const row = document.createElement("tr");
+    const th = document.createElement("th");
+    th.className = "key";
+    th.textContent = label;
+    row.append(th, valueCell(inv[key], flagged.has(key), numeric));
+    header.append(row);
+  }
+
+  const lines = document.querySelector("#lines tbody");
+  lines.replaceChildren();
+  inv.line_items.forEach((line, i) => {
+    const row = document.createElement("tr");
+    const index = document.createElement("td");
+    index.className = "num";
+    index.textContent = i + 1;
+    row.append(index);
+    for (const [key, numeric] of LINE_FIELDS) {
+      row.append(valueCell(line[key], flagged.has(`line_items[${i}].${key}`), numeric));
+    }
+    lines.append(row);
+  });
   document.getElementById("result").hidden = false;
 }
 
-function valueCell(value, isFlagged) {
+function setText(id, value) { document.getElementById(id).textContent = value; }
+
+function valueCell(value, isFlagged, numeric) {
   const td = document.createElement("td");
   // dir=auto lets each cell take its direction from its own first strong character,
   // so Arabic renders right-to-left inside a left-to-right table.
   td.dir = "auto";
+  if (numeric) td.className = "num";
   const text = value === null || value === undefined ? "" : String(value);
   if (isFlagged) {
-    td.className = "flagged";
+    td.classList.add("flagged");
     const input = document.createElement("input");
     input.value = text;
     input.dir = "auto";
+    input.setAttribute("aria-label", "flagged value, editable");
     td.append(input);
   } else {
     td.textContent = text;
