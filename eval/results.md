@@ -186,6 +186,55 @@ slips (INV-2026-1006 `فواكه`, INV-2026-1008 seller name, INV-2026-1026 two
 descriptions). `temperature=0` makes the output repeatable; on Arabic-Indic
 numerals it makes it repeatably wrong.
 
+## Resolver on real model output
+
+Run 2026-09-30 on gpt-4o's cached answers for the 6 Arabic-Indic samples: the
+last of the three evaluation responses per image, no API calls. "Misread" counts
+every numeric field that differs from ground truth; "in failed checks" counts
+those that sit in at least one failed arithmetic check, which are the values a
+review card lists.
+
+| Sample | Arithmetic | Resolver | Candidates | Misread | In failed checks | Misread outside the failed checks |
+|---|---|---|---|---|---|---|
+| INV-2026-1002 | needs_review | unresolvable | 0 | 13 | 11 | line_items[0].unit_price, line_items[4].unit_price |
+| INV-2026-1003 | needs_review | unresolvable | 0 | 8 | 5 | line_items[1–3].unit_price |
+| INV-2026-1010 | ok | not_needed | 0 | 0 | 0 | – |
+| INV-2026-1011 | needs_review | unresolvable | 0 | 5 | 4 | line_items[2].unit_price |
+| INV-2026-1012 | needs_review | unresolvable | 0 | 6 | 5 | total |
+| INV-2026-1020 | needs_review | unresolvable | 0 | 10 | 8 | line_items[0].unit_price, line_items[2].unit_price |
+
+Every sample with a misread failed arithmetic, and every one came back
+unresolvable: the resolver assumes one misread cell and these have 5 to 13. It
+made no suggestions, so none were wrong and none were right. Of the 42 misread
+values, 9 sat outside every failed check (8 of them unit prices): arithmetic
+flags the invoice, not every wrong cell.
+
+Reproduce from the repo root (needs `.cache/`; with no cache entry, `extract`
+would call the API):
+
+```bash
+OPENAI_MODEL=gpt-4o .venv/bin/python - <<'PY'
+from decimal import Decimal
+from app.extract import extract
+from app.resolve import resolve
+from eval.load_data import load_samples
+from eval.run_eval import flatten
+
+for s in load_samples():
+    if s.meta.numerals != "arabic_indic":
+        continue
+    result, meta = extract(s.image_path.read_bytes())  # cache only; a miss would call the API
+    assert meta.cache_hit, s.meta.file
+    got, truth = flatten(result.invoice), flatten(s.invoice)
+    wrong = {k for k, v in truth.items() if isinstance(v, Decimal) and got.get(k) != v}
+    r = resolve(result.invoice)
+    in_checks = wrong & {x.field for x in r.involved}
+    print(s.meta.file, result.status, r.status, f"candidates={len(r.candidates)}",
+          f"misread={len(wrong)}", f"in_failed_checks={len(in_checks)}",
+          f"outside={sorted(wrong - in_checks)}")
+PY
+```
+
 ## Reproducing
 
 ```

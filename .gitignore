@@ -25,3 +25,10 @@ eval/samples/
 
 # Editor/tooling
 .qodo/
+
+# CORU re-run files: transcription text and model responses (eval/coru/README.md)
+eval/coru/selection.json
+eval/coru/results_*.json
+eval/coru/verify_v1_*.json
+eval/coru/tess_x*.json
+eval/coru/.cache/

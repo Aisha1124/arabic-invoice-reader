@@ -1,0 +1,1336 @@
+{
+ "model": "gpt-4o",
+ "prompt_version": "n1",
+ "timestamp_utc": "2026-09-29T02:37:45.306305+00:00",
+ "lines": [
+  {
+   "line_id": "07724c9f-c988-4d4c-8c17-3518f3f5dbea_line_14",
+   "group": "arabic_indic",
+   "kind": "labelled",
+   "excluded": "other_line_in_crop",
+   "expected": [
+    "53.62"
+   ],
+   "model_answer": [
+    "12,76"
+   ],
+   "digits_only": false
+  },
+  {
+   "line_id": "1e59e1d7-ad9e-4a4a-b315-7a675ab95dfd_line_13",
+   "group": "arabic_indic",
+   "kind": "item_row",
+   "excluded": null,
+   "expected": [
+    "13.43",
+    "0.270",
+    "49.75"
+   ],
+   "model_answer": [
+    "12,43",
+    "0,270",
+    "49,75"
+   ],
+   "digits_only": false
+  },
+  {
+   "line_id": "1e59e1d7-ad9e-4a4a-b315-7a675ab95dfd_line_16",
+   "group": "arabic_indic",
+   "kind": "item_row",
+   "excluded": "digit_cut_off",
+   "expected": [
+    "4.50",
+    "1",
+    "24.50"
+   ],
+   "model_answer": [
+    "4,50",
+    "1",
+    "24,50"
+   ],
+   "digits_only": true
+  },
+  {
+   "line_id": "1e59e1d7-ad9e-4a4a-b315-7a675ab95dfd_line_19",
+   "group": "arabic_indic",
+   "kind": "item_row",
+   "excluded": null,
+   "expected": [
+    "19.75",
+    "5",
+    "3.95",
+    "15"
+   ],
+   "model_answer": [
+    "19,75",
+    "0",
+    "3,95",
+    "15",
+    "0"
+   ],
+   "digits_only": false
+  },
+  {
+   "line_id": "1e59e1d7-ad9e-4a4a-b315-7a675ab95dfd_line_20",
+   "group": "arabic_indic",
+   "kind": "item_row",
+   "excluded": null,
+   "expected": [
+    "19.75",
+    "5",
+    "3.95",
+    "15"
+   ],
+   "model_answer": [
+    "19,75",
+    "0",
+    "2,95",
+    "15"
+   ],
+   "digits_only": false
+  },
+  {
+   "line_id": "1e59e1d7-ad9e-4a4a-b315-7a675ab95dfd_line_23",
+   "group": "arabic_indic",
+   "kind": "item_row",
+   "excluded": "digit_cut_off",
+   "expected": [
+    "74.85",
+    "3",
+    "24.95"
+   ],
+   "model_answer": [
+    "24,95",
+    "3",
+    "74,85"
+   ],
+   "digits_only": true
+  },
+  {
+   "line_id": "1e59e1d7-ad9e-4a4a-b315-7a675ab95dfd_line_27",
+   "group": "arabic_indic",
+   "kind": "labelled",
+   "excluded": null,
+   "expected": [
+    "000.00"
+   ],
+   "model_answer": [
+    "1.000,00"
+   ],
+   "digits_only": false
+  },
+  {
+   "line_id": "1f220e57-4a7e-4d85-b382-9998960ebde5_total",
+   "group": "arabic_indic",
+   "kind": "labelled",
+   "excluded": null,
+   "expected": [
+    "159,00",
+    "1"
+   ],
+   "model_answer": [
+    "109",
+    "1",
+    "2,99"
+   ],
+   "digits_only": false
+  },
+  {
+   "line_id": "234d352d-5051-4fec-ac5d-a5212a5b9077_line_10",
+   "group": "arabic_indic",
+   "kind": "item_row",
+   "excluded": null,
+   "expected": [
+    "10.00",
+    "1",
+    "10.00",
+    "135"
+   ],
+   "model_answer": [
+    "10000",
+    "1",
+    "125",
+    "10000"
+   ],
+   "digits_only": false
+  },
+  {
+   "line_id": "27a4c125-71ae-445a-8f19-42aeba0f3642_total",
+   "group": "arabic_indic",
+   "kind": "labelled",
+   "excluded": "handwritten",
+   "expected": [
+    "250"
+   ],
+   "model_answer": [
+    "50,2"
+   ],
+   "digits_only": false
+  },
+  {
+   "line_id": "2c85f984-9864-4c15-bffe-492d102276a8_total",
+   "group": "arabic_indic",
+   "kind": "labelled",
+   "excluded": "digit_cut_off",
+   "expected": [
+    "66.0"
+   ],
+   "model_answer": [
+    "600"
+   ],
+   "digits_only": false
+  },
+  {
+   "line_id": "30ca174a-4c67-474a-ab45-70000fc283f7_line_9",
+   "group": "arabic_indic",
+   "kind": "labelled",
+   "excluded": null,
+   "expected": [
+    "37.00"
+   ],
+   "model_answer": [
+    "47,00"
+   ],
+   "digits_only": false
+  },
+  {
+   "line_id": "35058950-8985-46e5-bfef-30d37a225a09_total",
+   "group": "arabic_indic",
+   "kind": "labelled",
+   "excluded": null,
+   "expected": [
+    "120"
+   ],
+   "model_answer": [
+    "120"
+   ],
+   "digits_only": true
+  },
+  {
+   "line_id": "3aaa9f60-3fef-43d5-8a92-3f25ce86b5aa_line_4",
+   "group": "arabic_indic",
+   "kind": "labelled",
+   "excluded": null,
+   "expected": [
+    "102.85"
+   ],
+   "model_answer": [
+    "10,85"
+   ],
+   "digits_only": false
+  },
+  {
+   "line_id": "3b998526-3059-4809-8239-0436eeed1f16_line_190",
+   "group": "arabic_indic",
+   "kind": "labelled",
+   "excluded": null,
+   "expected": [
+    "48.00",
+    "12.00"
+   ],
+   "model_answer": [
+    "48,00",
+    "12,00"
+   ],
+   "digits_only": true
+  },
+  {
+   "line_id": "3e0dadc1-b903-4aad-adec-ea8ff8a7704b_total",
+   "group": "arabic_indic",
+   "kind": "labelled",
+   "excluded": null,
+   "expected": [
+    "142,00"
+   ],
+   "model_answer": [
+    "1.420,00"
+   ],
+   "digits_only": false
+  },
+  {
+   "line_id": "46ccec20-4679-4479-a74b-9c110002c342_line_22",
+   "group": "arabic_indic",
+   "kind": "item_row",
+   "excluded": null,
+   "expected": [
+    "80.00",
+    "1.00"
+   ],
+   "model_answer": [
+    "1,00",
+    "1.000"
+   ],
+   "digits_only": false
+  },
+  {
+   "line_id": "513ee063-3e78-4e93-bb5d-979c7a03b634_line_14",
+   "group": "arabic_indic",
+   "kind": "item_row",
+   "excluded": null,
+   "expected": [
+    "19,6",
+    "140",
+    "0,14"
+   ],
+   "model_answer": [
+    "19,6",
+    "140",
+    "0,14"
+   ],
+   "digits_only": true
+  },
+  {
+   "line_id": "513ee063-3e78-4e93-bb5d-979c7a03b634_line_18",
+   "group": "arabic_indic",
+   "kind": "labelled",
+   "excluded": "other_line_in_crop",
+   "expected": [
+    "165,28"
+   ],
+   "model_answer": [
+    "125,28"
+   ],
+   "digits_only": false
+  },
+  {
+   "line_id": "54c42162-99d2-4ee4-97f0-aab621fc651b_total",
+   "group": "arabic_indic",
+   "kind": "labelled",
+   "excluded": "other_line_in_crop",
+   "expected": [
+    "174,00"
+   ],
+   "model_answer": [
+    "174,00"
+   ],
+   "digits_only": true
+  },
+  {
+   "line_id": "5742ff8b-ebdb-4d93-b900-3b4154b71a47_line_4",
+   "group": "arabic_indic",
+   "kind": "labelled",
+   "excluded": null,
+   "expected": [
+    "0.00",
+    "0.00"
+   ],
+   "model_answer": [
+    "0,00",
+    "0,00"
+   ],
+   "digits_only": true
+  },
+  {
+   "line_id": "5a5bf090-5eb0-44bf-8ee6-5a909130e8b2_line_16",
+   "group": "arabic_indic",
+   "kind": "labelled",
+   "excluded": "other_line_in_crop",
+   "expected": [
+    "147.080"
+   ],
+   "model_answer": [
+    "147,080"
+   ],
+   "digits_only": true
+  },
+  {
+   "line_id": "5ad3bbf5-bff7-4188-a52a-b2693bb79a4f_line_18",
+   "group": "arabic_indic",
+   "kind": "labelled",
+   "excluded": "other_line_in_crop",
+   "expected": [
+    "138.29"
+   ],
+   "model_answer": [
+    "1,280"
+   ],
+   "digits_only": false
+  },
+  {
+   "line_id": "5e76093c-6633-45aa-ae80-57e9c8152a64_line_8",
+   "group": "arabic_indic",
+   "kind": "labelled",
+   "excluded": null,
+   "expected": [
+    "60,00"
+   ],
+   "model_answer": [
+    "6,00"
+   ],
+   "digits_only": false
+  },
+  {
+   "line_id": "5e76093c-6633-45aa-ae80-57e9c8152a64_total",
+   "group": "arabic_indic",
+   "kind": "labelled",
+   "excluded": null,
+   "expected": [
+    "60.00"
+   ],
+   "model_answer": [
+    "6.000"
+   ],
+   "digits_only": true
+  },
+  {
+   "line_id": "5eab8fa8-c05e-45a3-bf23-a6a84858bbfc_total",
+   "group": "arabic_indic",
+   "kind": "labelled",
+   "excluded": null,
+   "expected": [
+    "25.00",
+    "1"
+   ],
+   "model_answer": [
+    "1",
+    "250,00"
+   ],
+   "digits_only": false
+  },
+  {
+   "line_id": "61e8208f-5fec-4d6a-9070-1d01923f0216_line_7",
+   "group": "arabic_indic",
+   "kind": "item_row",
+   "excluded": "too_faint",
+   "expected": [
+    "20.00",
+    "1.000",
+    "10.00",
+    "300"
+   ],
+   "model_answer": [
+    "2,00",
+    "100,00",
+    "3,00"
+   ],
+   "digits_only": false
+  },
+  {
+   "line_id": "65d9f361-f71a-4391-b4cc-b25771b70047_line_16",
+   "group": "arabic_indic",
+   "kind": "item_row",
+   "excluded": "other_line_in_crop",
+   "expected": [
+    "6,88",
+    "5,50",
+    "1,25"
+   ],
+   "model_answer": [
+    "1,25",
+    "500",
+    "6,088"
+   ],
+   "digits_only": false
+  },
+  {
+   "line_id": "71723d56-418d-4e0b-8a5e-d91c6456f15f_line_4",
+   "group": "arabic_indic",
+   "kind": "item_row",
+   "excluded": "other_line_in_crop",
+   "expected": [
+    "19.44",
+    "0.864",
+    "22.50"
+   ],
+   "model_answer": [
+    "19,44",
+    "1,864",
+    "22,50"
+   ],
+   "digits_only": false
+  },
+  {
+   "line_id": "72cd3d0c-aa67-47cc-ab4c-cee00ad70520_line_32",
+   "group": "arabic_indic",
+   "kind": "labelled",
+   "excluded": null,
+   "expected": [
+    "192,984",
+    "27,016",
+    "220,000"
+   ],
+   "model_answer": [
+    "192,984",
+    "37,012",
+    "220,000"
+   ],
+   "digits_only": false
+  },
+  {
+   "line_id": "87f88557-53ac-4f56-9947-fe501f37b6a0_line_16",
+   "group": "arabic_indic",
+   "kind": "item_row",
+   "excluded": null,
+   "expected": [
+    "38.00",
+    "12.50",
+    "2.24"
+   ],
+   "model_answer": [
+    "280,00",
+    "12,50",
+    "2,74"
+   ],
+   "digits_only": false
+  },
+  {
+   "line_id": "8ea4e42d-d8d0-4952-be1f-441e6f38049f_line_18",
+   "group": "arabic_indic",
+   "kind": "labelled",
+   "excluded": null,
+   "expected": [
+    "0,00"
+   ],
+   "model_answer": [
+    "0,00"
+   ],
+   "digits_only": true
+  },
+  {
+   "line_id": "9ab841a4-a770-4089-b64c-d8b1365157b0_line_32",
+   "group": "arabic_indic",
+   "kind": "labelled",
+   "excluded": "too_blurry",
+   "expected": [
+    "1.216.00",
+    "149.22",
+    "14.00"
+   ],
+   "model_answer": [
+    "1.718",
+    "16.17",
+    "16"
+   ],
+   "digits_only": false
+  },
+  {
+   "line_id": "a93ca0c6-0eef-40e1-8c59-5e1962793bc7_line_11",
+   "group": "arabic_indic",
+   "kind": "labelled",
+   "excluded": null,
+   "expected": [
+    "9.21"
+   ],
+   "model_answer": [
+    "9,1"
+   ],
+   "digits_only": false
+  },
+  {
+   "line_id": "a99f63ab-ec7f-4ee6-a2ea-70ba45b748a2_total",
+   "group": "arabic_indic",
+   "kind": "labelled",
+   "excluded": "handwritten",
+   "expected": [
+    "520"
+   ],
+   "model_answer": [
+    "0,75"
+   ],
+   "digits_only": false
+  },
+  {
+   "line_id": "af595b90-3cb0-443a-bcd1-e6b57e3d013e_line_22",
+   "group": "arabic_indic",
+   "kind": "labelled",
+   "excluded": null,
+   "expected": [
+    "16,10"
+   ],
+   "model_answer": [
+    "10,6"
+   ],
+   "digits_only": false
+  },
+  {
+   "line_id": "bd7503e4-b7fe-4459-a0f0-8f1b2eeac3a2_line_12",
+   "group": "arabic_indic",
+   "kind": "labelled",
+   "excluded": null,
+   "expected": [
+    "132,19"
+   ],
+   "model_answer": [
+    "132,19"
+   ],
+   "digits_only": true
+  },
+  {
+   "line_id": "bfdadbc6-987f-4c8f-84fe-3dce712dc37c_line_12",
+   "group": "arabic_indic",
+   "kind": "labelled",
+   "excluded": null,
+   "expected": [
+    "3,00"
+   ],
+   "model_answer": [
+    "3,000"
+   ],
+   "digits_only": false
+  },
+  {
+   "line_id": "c464e16b-3c11-446a-840d-2ae28287fdd6_line_9",
+   "group": "arabic_indic",
+   "kind": "item_row",
+   "excluded": null,
+   "expected": [
+    "84.00",
+    "84.00",
+    "0",
+    "1"
+   ],
+   "model_answer": [
+    "48,00",
+    "48,00",
+    "1"
+   ],
+   "digits_only": false
+  },
+  {
+   "line_id": "cd04e50d-a3f8-4591-bdf2-02bbea78c3dc_line_100",
+   "group": "arabic_indic",
+   "kind": "item_row",
+   "excluded": null,
+   "expected": [
+    "1",
+    "5",
+    "5"
+   ],
+   "model_answer": [
+    "1",
+    "0"
+   ],
+   "digits_only": false
+  },
+  {
+   "line_id": "da8e483e-08a2-4d42-8ee9-d93ccdd3c21a_line_14",
+   "group": "arabic_indic",
+   "kind": "labelled",
+   "excluded": "other_line_in_crop",
+   "expected": [
+    "0,00"
+   ],
+   "model_answer": [
+    "0,00"
+   ],
+   "digits_only": true
+  },
+  {
+   "line_id": "db2d2948-5099-4f9b-91ea-f2f08e47b783_line_20",
+   "group": "arabic_indic",
+   "kind": "labelled",
+   "excluded": "other_line_in_crop",
+   "expected": [
+    "85.00"
+   ],
+   "model_answer": [
+    "85,00"
+   ],
+   "digits_only": true
+  },
+  {
+   "line_id": "ddf23862-d134-4c10-8b03-ba0068c66536_line_100",
+   "group": "arabic_indic",
+   "kind": "item_row",
+   "excluded": null,
+   "expected": [
+    "150,00",
+    "1,00"
+   ],
+   "model_answer": [
+    "100",
+    "15,00"
+   ],
+   "digits_only": false
+  },
+  {
+   "line_id": "eae3ee5a-b08c-48bc-a9b4-02266137e764_line_20",
+   "group": "arabic_indic",
+   "kind": "labelled",
+   "excluded": null,
+   "expected": [
+    "31,76"
+   ],
+   "model_answer": [
+    "31,76"
+   ],
+   "digits_only": true
+  },
+  {
+   "line_id": "f77aad43-f49e-4d27-8c2d-1d78b951b04c_line_220",
+   "group": "arabic_indic",
+   "kind": "labelled",
+   "excluded": null,
+   "expected": [
+    "12.00"
+   ],
+   "model_answer": [
+    "12,00"
+   ],
+   "digits_only": true
+  },
+  {
+   "line_id": "008fc7b4-e0a9-4a2f-9c37-88c1bcf86f30_line_15",
+   "group": "western",
+   "kind": "labelled",
+   "excluded": null,
+   "expected": [
+    "175.44",
+    "7"
+   ],
+   "model_answer": [
+    "175.44",
+    "7"
+   ],
+   "digits_only": true
+  },
+  {
+   "line_id": "00b61ef0-fb11-44a0-9629-2eb120844689_line_7",
+   "group": "western",
+   "kind": "item_row",
+   "excluded": null,
+   "expected": [
+    "6.75",
+    "6.75",
+    "1"
+   ],
+   "model_answer": [
+    "6.75",
+    "6.75",
+    "1"
+   ],
+   "digits_only": true
+  },
+  {
+   "line_id": "00c3a0d0-0ed2-4e27-9de1-222e3d93fa3e_line_22",
+   "group": "western",
+   "kind": "item_row",
+   "excluded": null,
+   "expected": [
+    "5.00",
+    "2.00",
+    "2.50"
+   ],
+   "model_answer": [
+    "5.00",
+    "2.00",
+    "2.50"
+   ],
+   "digits_only": true
+  },
+  {
+   "line_id": "00c3a0d0-0ed2-4e27-9de1-222e3d93fa3e_line_31",
+   "group": "western",
+   "kind": "item_row",
+   "excluded": null,
+   "expected": [
+    "60.00",
+    "2.00",
+    "30.00",
+    "1",
+    "8"
+   ],
+   "model_answer": [
+    "60.00",
+    "2.00",
+    "30.00"
+   ],
+   "digits_only": false
+  },
+  {
+   "line_id": "03a95cbf-11d4-41b3-bc21-60e9dca0eae1_total",
+   "group": "western",
+   "kind": "labelled",
+   "excluded": null,
+   "expected": [
+    "225.00"
+   ],
+   "model_answer": [
+    "225.00"
+   ],
+   "digits_only": true
+  },
+  {
+   "line_id": "05de4f85-beb7-43b5-915f-683221e6bd6a_line_7",
+   "group": "western",
+   "kind": "item_row",
+   "excluded": null,
+   "expected": [
+    "2",
+    "65.00",
+    "130.00"
+   ],
+   "model_answer": [
+    "2",
+    "65.00",
+    "130.00"
+   ],
+   "digits_only": true
+  },
+  {
+   "line_id": "0600c9a1-074d-4af7-908d-533627c26f08_total",
+   "group": "western",
+   "kind": "labelled",
+   "excluded": null,
+   "expected": [
+    "410.26"
+   ],
+   "model_answer": [
+    "410.26"
+   ],
+   "digits_only": true
+  },
+  {
+   "line_id": "07069e6d-7f9b-4614-935d-6788c949fa50_line_14",
+   "group": "western",
+   "kind": "item_row",
+   "excluded": "other_line_in_crop",
+   "expected": [
+    "10.25",
+    "1",
+    "10.25"
+   ],
+   "model_answer": [
+    "10.25",
+    "1",
+    "10.25"
+   ],
+   "digits_only": true
+  },
+  {
+   "line_id": "07742750-c4db-4ef2-bbab-c8b73d187bf0_line_6",
+   "group": "western",
+   "kind": "labelled",
+   "excluded": null,
+   "expected": [
+    "55.00"
+   ],
+   "model_answer": [
+    "55.00"
+   ],
+   "digits_only": true
+  },
+  {
+   "line_id": "07ae2f14-e58f-4808-aed6-cd0d46cdfa60_line_9",
+   "group": "western",
+   "kind": "item_row",
+   "excluded": null,
+   "expected": [
+    "1",
+    "69.00",
+    "69.00"
+   ],
+   "model_answer": [
+    "1",
+    "69.00",
+    "69.00"
+   ],
+   "digits_only": true
+  },
+  {
+   "line_id": "08fe8f9d-2fcf-4338-ada0-93af354457e1_total",
+   "group": "western",
+   "kind": "labelled",
+   "excluded": null,
+   "expected": [
+    "237.75"
+   ],
+   "model_answer": [
+    "237.75"
+   ],
+   "digits_only": true
+  },
+  {
+   "line_id": "0a295b55-5c3d-4f4e-830d-fc3b2edb63d8_line_23",
+   "group": "western",
+   "kind": "item_row",
+   "excluded": null,
+   "expected": [
+    "2.00",
+    "20.00",
+    "40.00"
+   ],
+   "model_answer": [
+    "2.00",
+    "20.00",
+    "40.00"
+   ],
+   "digits_only": true
+  },
+  {
+   "line_id": "0a525be4-04be-43de-9791-8d860c62f4fb_line_13",
+   "group": "western",
+   "kind": "item_row",
+   "excluded": "other_line_in_crop",
+   "expected": [
+    "50.00",
+    "1.00",
+    "50.00"
+   ],
+   "model_answer": [
+    "50.00",
+    "1.00",
+    "50.00"
+   ],
+   "digits_only": true
+  },
+  {
+   "line_id": "0a525be4-04be-43de-9791-8d860c62f4fb_line_14",
+   "group": "western",
+   "kind": "item_row",
+   "excluded": "other_line_in_crop",
+   "expected": [
+    "50.00",
+    "1.00",
+    "50.00"
+   ],
+   "model_answer": [
+    "50.00",
+    "1.00",
+    "50.00",
+    "50.00",
+    "200.00",
+    "3.00",
+    "4,5"
+   ],
+   "digits_only": false
+  },
+  {
+   "line_id": "0a54b741-63d8-4b0b-96e9-c1ab19b10ce8_total",
+   "group": "western",
+   "kind": "labelled",
+   "excluded": null,
+   "expected": [
+    "5.00"
+   ],
+   "model_answer": [
+    "5.00"
+   ],
+   "digits_only": true
+  },
+  {
+   "line_id": "0a645d1b-1bfd-43d9-8ee2-acfe6c247332_line_14",
+   "group": "western",
+   "kind": "labelled",
+   "excluded": null,
+   "expected": [
+    "0.00",
+    "99.972"
+   ],
+   "model_answer": [
+    "0.00",
+    "99.972"
+   ],
+   "digits_only": true
+  },
+  {
+   "line_id": "0a645d1b-1bfd-43d9-8ee2-acfe6c247332_line_8",
+   "group": "western",
+   "kind": "item_row",
+   "excluded": null,
+   "expected": [
+    "21.83",
+    "0.321",
+    "68.00"
+   ],
+   "model_answer": [
+    "21.83",
+    "0.321",
+    "68.00"
+   ],
+   "digits_only": true
+  },
+  {
+   "line_id": "0b00770c-aeb8-48a3-bdfa-05f1f5138101_line_18",
+   "group": "western",
+   "kind": "labelled",
+   "excluded": "other_line_in_crop",
+   "expected": [
+    "581.00"
+   ],
+   "model_answer": [
+    "581,00"
+   ],
+   "digits_only": true
+  },
+  {
+   "line_id": "0ba539f4-d6d1-49d9-be5a-5c5a9779b3c2_line_10",
+   "group": "western",
+   "kind": "item_row",
+   "excluded": null,
+   "expected": [
+    "10.95",
+    "10.95",
+    "1",
+    "104",
+    "94"
+   ],
+   "model_answer": [
+    "10,95",
+    "10,95",
+    "1",
+    "104,94"
+   ],
+   "digits_only": false
+  },
+  {
+   "line_id": "0ba539f4-d6d1-49d9-be5a-5c5a9779b3c2_line_14",
+   "group": "western",
+   "kind": "labelled",
+   "excluded": null,
+   "expected": [
+    "0.00"
+   ],
+   "model_answer": [
+    "0,00"
+   ],
+   "digits_only": true
+  },
+  {
+   "line_id": "0c5ceb19-f5d3-4d9b-a78b-e067074a3421_line_12",
+   "group": "western",
+   "kind": "labelled",
+   "excluded": null,
+   "expected": [
+    "0.00"
+   ],
+   "model_answer": [
+    "0,00"
+   ],
+   "digits_only": true
+  },
+  {
+   "line_id": "0c5ceb19-f5d3-4d9b-a78b-e067074a3421_line_9",
+   "group": "western",
+   "kind": "item_row",
+   "excluded": "other_line_in_crop",
+   "expected": [
+    "7.28",
+    "0.260",
+    "28.00"
+   ],
+   "model_answer": [
+    "7,28",
+    "0,260",
+    "28,00"
+   ],
+   "digits_only": true
+  },
+  {
+   "line_id": "0dd4d56a-8260-4cfb-b778-1d170e050e3e_line_13",
+   "group": "western",
+   "kind": "labelled",
+   "excluded": null,
+   "expected": [
+    "0.00"
+   ],
+   "model_answer": [
+    "0.00"
+   ],
+   "digits_only": true
+  },
+  {
+   "line_id": "0e0c467a-feae-41c1-b3dc-5152ced4a2bc_line_32",
+   "group": "western",
+   "kind": "labelled",
+   "excluded": null,
+   "expected": [
+    "98.60"
+   ],
+   "model_answer": [
+    "98.60"
+   ],
+   "digits_only": true
+  },
+  {
+   "line_id": "0e917e94-26a0-4380-82b6-a28f5d6c0317_line_10",
+   "group": "western",
+   "kind": "item_row",
+   "excluded": null,
+   "expected": [
+    "18.72",
+    "0.288",
+    "65.00"
+   ],
+   "model_answer": [
+    "18.72",
+    "0.288",
+    "65.00"
+   ],
+   "digits_only": true
+  },
+  {
+   "line_id": "0e9e1928-8417-41d5-b4ab-0ea543f638ba_total",
+   "group": "western",
+   "kind": "labelled",
+   "excluded": null,
+   "expected": [
+    "85.00"
+   ],
+   "model_answer": [
+    "85.00"
+   ],
+   "digits_only": true
+  },
+  {
+   "line_id": "0ec6267f-5fe2-4f31-9606-cd1943d6025f_line_9",
+   "group": "western",
+   "kind": "item_row",
+   "excluded": "other_line_in_crop",
+   "expected": [
+    "41.75",
+    "1.00",
+    "3",
+    "30"
+   ],
+   "model_answer": [
+    "41.75",
+    "1.00",
+    "30"
+   ],
+   "digits_only": false
+  },
+  {
+   "line_id": "0f6fd307-bf2a-40d0-8e92-5d533d73d2bf_total",
+   "group": "western",
+   "kind": "labelled",
+   "excluded": "other_line_in_crop",
+   "expected": [
+    "141.37"
+   ],
+   "model_answer": [
+    "141.37"
+   ],
+   "digits_only": true
+  },
+  {
+   "line_id": "0fd48fd5-0474-4261-8337-12499f77c4c1_line_11",
+   "group": "western",
+   "kind": "labelled",
+   "excluded": null,
+   "expected": [
+    "160.00"
+   ],
+   "model_answer": [
+    "160.00"
+   ],
+   "digits_only": true
+  },
+  {
+   "line_id": "112a19fe-dc6b-4620-b4d7-a7a29d548e74_line_10",
+   "group": "western",
+   "kind": "item_row",
+   "excluded": "digit_cut_off",
+   "expected": [
+    "0.16",
+    "190.00",
+    "30.40"
+   ],
+   "model_answer": [
+    "1.16",
+    "190.00",
+    "30.40"
+   ],
+   "digits_only": false
+  },
+  {
+   "line_id": "11a83e2b-35a7-4d01-b78f-ff9da4de4430_total",
+   "group": "western",
+   "kind": "labelled",
+   "excluded": null,
+   "expected": [
+    "20.00"
+   ],
+   "model_answer": [
+    "20,00"
+   ],
+   "digits_only": true
+  },
+  {
+   "line_id": "17cb2430-323e-4747-a32f-f94c5634fc08_line_10",
+   "group": "western",
+   "kind": "labelled",
+   "excluded": null,
+   "expected": [
+    "69.00"
+   ],
+   "model_answer": [
+    "69,00"
+   ],
+   "digits_only": true
+  },
+  {
+   "line_id": "19ea202b-a21a-4c96-a7cc-05a76dc6f337_line_17",
+   "group": "western",
+   "kind": "labelled",
+   "excluded": null,
+   "expected": [
+    "174.00"
+   ],
+   "model_answer": [
+    "174,00"
+   ],
+   "digits_only": true
+  },
+  {
+   "line_id": "1a0fb8f5-127f-48cd-bba8-b525c6b7a240_line_19",
+   "group": "western",
+   "kind": "labelled",
+   "excluded": "other_line_in_crop",
+   "expected": [
+    "32.25"
+   ],
+   "model_answer": [
+    "32.25"
+   ],
+   "digits_only": true
+  },
+  {
+   "line_id": "1b57ac85-264d-46d6-be39-f194034e62ce_line_8",
+   "group": "western",
+   "kind": "labelled",
+   "excluded": null,
+   "expected": [
+    "35.00"
+   ],
+   "model_answer": [
+    "35.00"
+   ],
+   "digits_only": true
+  },
+  {
+   "line_id": "1b5e014e-fe1a-4108-9a79-6e0c9245daf6_line_9",
+   "group": "western",
+   "kind": "labelled",
+   "excluded": null,
+   "expected": [
+    "0.00",
+    "48.45"
+   ],
+   "model_answer": [
+    "0,00",
+    "48,45"
+   ],
+   "digits_only": true
+  },
+  {
+   "line_id": "1c2f0106-b392-43a4-b97e-99984608b2c3_line_16",
+   "group": "western",
+   "kind": "labelled",
+   "excluded": null,
+   "expected": [
+    "204.00"
+   ],
+   "model_answer": [
+    "204.00"
+   ],
+   "digits_only": true
+  },
+  {
+   "line_id": "1d469a43-7a11-42da-88ad-c08f92e58717_line_10",
+   "group": "western",
+   "kind": "labelled",
+   "excluded": null,
+   "expected": [
+    "94.09"
+   ],
+   "model_answer": [
+    "94,09"
+   ],
+   "digits_only": true
+  },
+  {
+   "line_id": "1e007cba-3869-4857-a003-3e6782bbfd73_total",
+   "group": "western",
+   "kind": "labelled",
+   "excluded": null,
+   "expected": [
+    "53.00"
+   ],
+   "model_answer": [
+    "53.00"
+   ],
+   "digits_only": true
+  },
+  {
+   "line_id": "1e3376a6-4da8-4ff0-971e-9bdf1750b202_total",
+   "group": "western",
+   "kind": "labelled",
+   "excluded": null,
+   "expected": [
+    "60.00"
+   ],
+   "model_answer": [
+    "60.00"
+   ],
+   "digits_only": true
+  },
+  {
+   "line_id": "1e396f06-b27b-4eb9-94e3-e0fcbc0b32b9_line_18",
+   "group": "western",
+   "kind": "labelled",
+   "excluded": null,
+   "expected": [
+    "0.00"
+   ],
+   "model_answer": [
+    "0.00"
+   ],
+   "digits_only": true
+  },
+  {
+   "line_id": "1eec6a63-d24e-4c8a-9d99-2cd3d42a53ad_line_18",
+   "group": "western",
+   "kind": "labelled",
+   "excluded": null,
+   "expected": [
+    "5.68"
+   ],
+   "model_answer": [
+    "5,68"
+   ],
+   "digits_only": true
+  },
+  {
+   "line_id": "2012fe5f-e7d0-4e96-b445-03a7bc180650_total",
+   "group": "western",
+   "kind": "labelled",
+   "excluded": null,
+   "expected": [
+    "30.00"
+   ],
+   "model_answer": [
+    "30.00"
+   ],
+   "digits_only": true
+  },
+  {
+   "line_id": "20adb256-c5ed-469e-90f6-b5f03b8fc7ea_total",
+   "group": "western",
+   "kind": "labelled",
+   "excluded": null,
+   "expected": [
+    "99.97"
+   ],
+   "model_answer": [
+    "99.97"
+   ],
+   "digits_only": true
+  },
+  {
+   "line_id": "20c0a687-eab0-4c77-9b77-a1716f5ae9ee_line_16",
+   "group": "western",
+   "kind": "labelled",
+   "excluded": null,
+   "expected": [
+    "73.6",
+    "5.00"
+   ],
+   "model_answer": [
+    "73,6",
+    "5,00"
+   ],
+   "digits_only": true
+  }
+ ]
+}

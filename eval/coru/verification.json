@@ -1,0 +1,550 @@
+{
+ "model": "gpt-4o",
+ "version": "v1",
+ "seed": 20260929,
+ "note": "The correct option comes from CORU. In real use it would come from invoice arithmetic; this tests only the confirming step in isolation. Both options put the decimal separator where it is printed, so a wrong option may carry a separator the model's original reading did not.",
+ "reading_accuracy_hard_numbers": {
+  "correct": 6,
+  "total": 56
+ },
+ "items": [
+  {
+   "line_id": "1e59e1d7-ad9e-4a4a-b315-7a675ab95dfd_line_13",
+   "kind": "hard",
+   "correct": "١٣٫٤٣",
+   "wrong": "١٢٫٤٣",
+   "correct_option": "A",
+   "answer": "B",
+   "right": false,
+   "misread_by": [
+    "n1",
+    "n2"
+   ],
+   "substitution": null
+  },
+  {
+   "line_id": "1e59e1d7-ad9e-4a4a-b315-7a675ab95dfd_line_19",
+   "kind": "hard",
+   "correct": "٥",
+   "wrong": "٠",
+   "correct_option": "B",
+   "answer": "A",
+   "right": false,
+   "misread_by": [
+    "n1",
+    "n2"
+   ],
+   "substitution": null
+  },
+  {
+   "line_id": "1e59e1d7-ad9e-4a4a-b315-7a675ab95dfd_line_20",
+   "kind": "hard",
+   "correct": "٥",
+   "wrong": "٠",
+   "correct_option": "B",
+   "answer": "A",
+   "right": false,
+   "misread_by": [
+    "n1",
+    "n2"
+   ],
+   "substitution": null
+  },
+  {
+   "line_id": "1e59e1d7-ad9e-4a4a-b315-7a675ab95dfd_line_20",
+   "kind": "hard",
+   "correct": "٣٫٩٥",
+   "wrong": "٢٫٩٥",
+   "correct_option": "A",
+   "answer": "B",
+   "right": false,
+   "misread_by": [
+    "n1",
+    "n2"
+   ],
+   "substitution": null
+  },
+  {
+   "line_id": "1e59e1d7-ad9e-4a4a-b315-7a675ab95dfd_line_27",
+   "kind": "hard",
+   "correct": "٠٠٠٫٠٠",
+   "wrong": "١٠٠٠٫٠٠",
+   "correct_option": "B",
+   "answer": "A",
+   "right": false,
+   "misread_by": [
+    "n1",
+    "n2"
+   ],
+   "substitution": null
+  },
+  {
+   "line_id": "1f220e57-4a7e-4d85-b382-9998960ebde5_total",
+   "kind": "hard",
+   "correct": "١٥٩٫٠٠",
+   "wrong": "١٫٠٩",
+   "correct_option": "B",
+   "answer": "A",
+   "right": false,
+   "misread_by": [
+    "n1"
+   ],
+   "substitution": null
+  },
+  {
+   "line_id": "1f220e57-4a7e-4d85-b382-9998960ebde5_total",
+   "kind": "hard",
+   "correct": "١٥٩٫٠٠",
+   "wrong": "١٦٩٫٠٠",
+   "correct_option": "A",
+   "answer": "B",
+   "right": false,
+   "misread_by": [
+    "n2"
+   ],
+   "substitution": null
+  },
+  {
+   "line_id": "234d352d-5051-4fec-ac5d-a5212a5b9077_line_10",
+   "kind": "hard",
+   "correct": "١٠٫٠٠",
+   "wrong": "١٠٠٫٠٠",
+   "correct_option": "B",
+   "answer": "A",
+   "right": false,
+   "misread_by": [
+    "n1",
+    "n2"
+   ],
+   "substitution": null
+  },
+  {
+   "line_id": "234d352d-5051-4fec-ac5d-a5212a5b9077_line_10",
+   "kind": "hard",
+   "correct": "١٣٥",
+   "wrong": "١٢٥",
+   "correct_option": "A",
+   "answer": "B",
+   "right": false,
+   "misread_by": [
+    "n1",
+    "n2"
+   ],
+   "substitution": null
+  },
+  {
+   "line_id": "30ca174a-4c67-474a-ab45-70000fc283f7_line_9",
+   "kind": "hard",
+   "correct": "٣٧٫٠٠",
+   "wrong": "٤٧٫٠٠",
+   "correct_option": "B",
+   "answer": "A",
+   "right": false,
+   "misread_by": [
+    "n1",
+    "n2"
+   ],
+   "substitution": null
+  },
+  {
+   "line_id": "3aaa9f60-3fef-43d5-8a92-3f25ce86b5aa_line_4",
+   "kind": "hard",
+   "correct": "١٠٢٫٨٥",
+   "wrong": "١٠٫٨٥",
+   "correct_option": "B",
+   "answer": "B",
+   "right": true,
+   "misread_by": [
+    "n1",
+    "n2"
+   ],
+   "substitution": null
+  },
+  {
+   "line_id": "3e0dadc1-b903-4aad-adec-ea8ff8a7704b_total",
+   "kind": "hard",
+   "correct": "١٤٢٫٠٠",
+   "wrong": "١٤٢٠٫٠٠",
+   "correct_option": "B",
+   "answer": "B",
+   "right": true,
+   "misread_by": [
+    "n1"
+   ],
+   "substitution": null
+  },
+  {
+   "line_id": "46ccec20-4679-4479-a74b-9c110002c342_line_22",
+   "kind": "hard",
+   "correct": "٨٠٫٠٠",
+   "wrong": "١٠٫٠٠",
+   "correct_option": "B",
+   "answer": "A",
+   "right": false,
+   "misread_by": [
+    "n1"
+   ],
+   "substitution": null
+  },
+  {
+   "line_id": "46ccec20-4679-4479-a74b-9c110002c342_line_22",
+   "kind": "hard",
+   "correct": "٨٠٫٠٠",
+   "wrong": "١٠٠٫٠٠",
+   "correct_option": "A",
+   "answer": "B",
+   "right": false,
+   "misread_by": [
+    "n2"
+   ],
+   "substitution": null
+  },
+  {
+   "line_id": "5e76093c-6633-45aa-ae80-57e9c8152a64_line_8",
+   "kind": "hard",
+   "correct": "٦٠٫٠٠",
+   "wrong": "٦٫٠٠",
+   "correct_option": "A",
+   "answer": "A",
+   "right": true,
+   "misread_by": [
+    "n1"
+   ],
+   "substitution": null
+  },
+  {
+   "line_id": "5e76093c-6633-45aa-ae80-57e9c8152a64_line_8",
+   "kind": "hard",
+   "correct": "٦٠٫٠٠",
+   "wrong": "٦٠٠٫٠٠",
+   "correct_option": "A",
+   "answer": "B",
+   "right": false,
+   "misread_by": [
+    "n2"
+   ],
+   "substitution": null
+  },
+  {
+   "line_id": "5eab8fa8-c05e-45a3-bf23-a6a84858bbfc_total",
+   "kind": "hard",
+   "correct": "٢٥٫٠٠",
+   "wrong": "٢٥٠٫٠٠",
+   "correct_option": "B",
+   "answer": "A",
+   "right": false,
+   "misread_by": [
+    "n1"
+   ],
+   "substitution": null
+  },
+  {
+   "line_id": "72cd3d0c-aa67-47cc-ab4c-cee00ad70520_line_32",
+   "kind": "hard",
+   "correct": "٢٧٫٠١٦",
+   "wrong": "٣٧٫٠١٢",
+   "correct_option": "A",
+   "answer": "A",
+   "right": true,
+   "misread_by": [
+    "n1",
+    "n2"
+   ],
+   "substitution": null
+  },
+  {
+   "line_id": "72cd3d0c-aa67-47cc-ab4c-cee00ad70520_line_32",
+   "kind": "hard",
+   "correct": "٢٢٠٫٠٠٠",
+   "wrong": "٢٣٠٫٠٠٠",
+   "correct_option": "A",
+   "answer": "A",
+   "right": true,
+   "misread_by": [
+    "n2"
+   ],
+   "substitution": null
+  },
+  {
+   "line_id": "87f88557-53ac-4f56-9947-fe501f37b6a0_line_16",
+   "kind": "hard",
+   "correct": "٢٫٢٤",
+   "wrong": "٢٫٧٤",
+   "correct_option": "B",
+   "answer": "B",
+   "right": true,
+   "misread_by": [
+    "n1"
+   ],
+   "substitution": null
+  },
+  {
+   "line_id": "87f88557-53ac-4f56-9947-fe501f37b6a0_line_16",
+   "kind": "hard",
+   "correct": "٣٨٫٠٠",
+   "wrong": "٢٨٠٫٠٠",
+   "correct_option": "A",
+   "answer": "B",
+   "right": false,
+   "misread_by": [
+    "n1"
+   ],
+   "substitution": null
+  },
+  {
+   "line_id": "87f88557-53ac-4f56-9947-fe501f37b6a0_line_16",
+   "kind": "hard",
+   "correct": "٣٨٫٠٠",
+   "wrong": "٢٨٫٠٠",
+   "correct_option": "A",
+   "answer": "B",
+   "right": false,
+   "misread_by": [
+    "n2"
+   ],
+   "substitution": null
+  },
+  {
+   "line_id": "87f88557-53ac-4f56-9947-fe501f37b6a0_line_16",
+   "kind": "hard",
+   "correct": "٢٫٢٤",
+   "wrong": "٢٫٠٤",
+   "correct_option": "A",
+   "answer": "B",
+   "right": false,
+   "misread_by": [
+    "n2"
+   ],
+   "substitution": null
+  },
+  {
+   "line_id": "a93ca0c6-0eef-40e1-8c59-5e1962793bc7_line_11",
+   "kind": "hard",
+   "correct": "٩٫٢١",
+   "wrong": "٩١",
+   "correct_option": "B",
+   "answer": "A",
+   "right": false,
+   "misread_by": [
+    "n1",
+    "n2"
+   ],
+   "substitution": null
+  },
+  {
+   "line_id": "af595b90-3cb0-443a-bcd1-e6b57e3d013e_line_22",
+   "kind": "hard",
+   "correct": "١٦٫١٠",
+   "wrong": "١٫٠٦",
+   "correct_option": "B",
+   "answer": "B",
+   "right": true,
+   "misread_by": [
+    "n1"
+   ],
+   "substitution": null
+  },
+  {
+   "line_id": "bd7503e4-b7fe-4459-a0f0-8f1b2eeac3a2_line_12",
+   "kind": "hard",
+   "correct": "١٣٢٫١٩",
+   "wrong": "١٣٫٣٩",
+   "correct_option": "B",
+   "answer": "B",
+   "right": true,
+   "misread_by": [
+    "n2"
+   ],
+   "substitution": null
+  },
+  {
+   "line_id": "bfdadbc6-987f-4c8f-84fe-3dce712dc37c_line_12",
+   "kind": "hard",
+   "correct": "٣٫٠٠",
+   "wrong": "٣٠٫٠٠",
+   "correct_option": "A",
+   "answer": "B",
+   "right": false,
+   "misread_by": [
+    "n1",
+    "n2"
+   ],
+   "substitution": null
+  },
+  {
+   "line_id": "c464e16b-3c11-446a-840d-2ae28287fdd6_line_9",
+   "kind": "hard",
+   "correct": "٨٤٫٠٠",
+   "wrong": "٤٨٫٠٠",
+   "correct_option": "B",
+   "answer": "A",
+   "right": false,
+   "misread_by": [
+    "n1"
+   ],
+   "substitution": null
+  },
+  {
+   "line_id": "c464e16b-3c11-446a-840d-2ae28287fdd6_line_9",
+   "kind": "hard",
+   "correct": "٨٤٫٠٠",
+   "wrong": "٤٥٫٠٠",
+   "correct_option": "B",
+   "answer": "A",
+   "right": false,
+   "misread_by": [
+    "n2"
+   ],
+   "substitution": null
+  },
+  {
+   "line_id": "cd04e50d-a3f8-4591-bdf2-02bbea78c3dc_line_100",
+   "kind": "hard",
+   "correct": "٥",
+   "wrong": "٠",
+   "correct_option": "A",
+   "answer": "B",
+   "right": false,
+   "misread_by": [
+    "n1"
+   ],
+   "substitution": null
+  },
+  {
+   "line_id": "cd04e50d-a3f8-4591-bdf2-02bbea78c3dc_line_100",
+   "kind": "hard",
+   "correct": "٥",
+   "wrong": "٠٥",
+   "correct_option": "A",
+   "answer": "A",
+   "right": true,
+   "misread_by": [
+    "n2"
+   ],
+   "substitution": null
+  },
+  {
+   "line_id": "ddf23862-d134-4c10-8b03-ba0068c66536_line_100",
+   "kind": "hard",
+   "correct": "١٥٠٫٠٠",
+   "wrong": "١٥٫٠٠",
+   "correct_option": "A",
+   "answer": "A",
+   "right": true,
+   "misread_by": [
+    "n1"
+   ],
+   "substitution": null
+  },
+  {
+   "line_id": "3b998526-3059-4809-8239-0436eeed1f16_line_190",
+   "kind": "control",
+   "correct": "١٢٫٠٠",
+   "wrong": "١٣٫٠٠",
+   "correct_option": "A",
+   "answer": "A",
+   "right": true,
+   "misread_by": [],
+   "substitution": "٢→٣"
+  },
+  {
+   "line_id": "513ee063-3e78-4e93-bb5d-979c7a03b634_line_14",
+   "kind": "control",
+   "correct": "١٤٠",
+   "wrong": "١٥٠",
+   "correct_option": "B",
+   "answer": "B",
+   "right": true,
+   "misread_by": [],
+   "substitution": "٤→٥"
+  },
+  {
+   "line_id": "5e76093c-6633-45aa-ae80-57e9c8152a64_total",
+   "kind": "control",
+   "correct": "٦٠٫٠٠",
+   "wrong": "٢٠٫٠٠",
+   "correct_option": "A",
+   "answer": "A",
+   "right": true,
+   "misread_by": [],
+   "substitution": "٦→٢"
+  },
+  {
+   "line_id": "35058950-8985-46e5-bfef-30d37a225a09_total",
+   "kind": "control",
+   "correct": "١٢٠",
+   "wrong": "١٣٠",
+   "correct_option": "B",
+   "answer": "B",
+   "right": true,
+   "misread_by": [],
+   "substitution": "٢→٣"
+  },
+  {
+   "line_id": "f77aad43-f49e-4d27-8c2d-1d78b951b04c_line_220",
+   "kind": "control",
+   "correct": "١٢٫٠٠",
+   "wrong": "١٣٫٠٠",
+   "correct_option": "A",
+   "answer": "A",
+   "right": true,
+   "misread_by": [],
+   "substitution": "٢→٣"
+  },
+  {
+   "line_id": "eae3ee5a-b08c-48bc-a9b4-02266137e764_line_20",
+   "kind": "control",
+   "correct": "٣١٫٧٦",
+   "wrong": "٢١٫٧٦",
+   "correct_option": "B",
+   "answer": "B",
+   "right": true,
+   "misread_by": [],
+   "substitution": "٣→٢"
+  },
+  {
+   "line_id": "1e59e1d7-ad9e-4a4a-b315-7a675ab95dfd_line_19",
+   "kind": "control",
+   "correct": "٣٫٩٥",
+   "wrong": "٢٫٩٥",
+   "correct_option": "B",
+   "answer": "B",
+   "right": true,
+   "misread_by": [],
+   "substitution": "٣→٢"
+  },
+  {
+   "line_id": "1e59e1d7-ad9e-4a4a-b315-7a675ab95dfd_line_13",
+   "kind": "control",
+   "correct": "٤٩٫٧٥",
+   "wrong": "٤٩٫٧٠",
+   "correct_option": "B",
+   "answer": "B",
+   "right": true,
+   "misread_by": [],
+   "substitution": "٥→٠"
+  },
+  {
+   "line_id": "87f88557-53ac-4f56-9947-fe501f37b6a0_line_16",
+   "kind": "control",
+   "correct": "١٢٫٥٠",
+   "wrong": "١٢٫٠٠",
+   "correct_option": "A",
+   "answer": "A",
+   "right": true,
+   "misread_by": [],
+   "substitution": "٥→٠"
+  },
+  {
+   "line_id": "72cd3d0c-aa67-47cc-ab4c-cee00ad70520_line_32",
+   "kind": "control",
+   "correct": "١٩٢٫٩٨٤",
+   "wrong": "١٩٢٫٩٤٤",
+   "correct_option": "A",
+   "answer": "A",
+   "right": true,
+   "misread_by": [],
+   "substitution": "٨→٤"
+  }
+ ]
+}

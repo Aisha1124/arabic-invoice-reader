@@ -1,5 +1,5 @@
 import json
-from datetime import date, datetime
+from datetime import UTC, date, datetime
 from decimal import Decimal
 from pathlib import Path
 
@@ -7,7 +7,13 @@ import pytest
 
 from app import cache, extract
 from app.schema import CallMetadata, Invoice, LineItem
-from eval.load_data import GroundTruthMeta, Sample
+from eval.load_data import (
+    GOLDEN_COLUMNS,
+    GoldenRow,
+    GroundTruthMeta,
+    Sample,
+    load_golden,
+)
 from eval.run_eval import (
     Run,
     accuracy,
@@ -17,9 +23,14 @@ from eval.run_eval import (
     defect_catch,
     dump_runs,
     flatten,
+    golden_accuracy,
+    golden_record,
+    golden_report,
     main,
     report,
     subgroup_table,
+    unverified_fields,
+    write_run_record,
 )
 
 META = CallMetadata(
@@ -246,3 +257,201 @@ def test_main_runs_from_cache_without_api(
     out = capsys.readouterr().out
     assert "cache_hits=1" in out
     assert "invoice_type" in out
+
+
+def _golden_row(file: str = "a.png", numerals: str = "latin") -> GoldenRow:
+    """Matches _invoice(): one line, 2 x 100.00 = 200.00, total 230.00."""
+    expected = {
+        "subtotal": "200.00",
+        "vat_total": "30.00",
+        "total": "230.00",
+        "line_items.count": "1",
+        "line_items[0].quantity": "2",
+        "line_items[0].unit_price": "100.00",
+        "line_items[0].line_total": "200.00",
+    }
+    return GoldenRow(
+        file=file,
+        image_path=Path(file),
+        numerals=numerals,
+        expected={k: Decimal(v) for k, v in expected.items()},
+    )
+
+
+def test_unverified_fields_are_everything_outside_the_csv() -> None:
+    assert unverified_fields() == [
+        "invoice_number",
+        "invoice_date",
+        "invoice_timestamp",
+        "invoice_type",
+        "seller_name",
+        "seller_vat_number",
+        "buyer_name",
+        "buyer_vat_number",
+        "currency",
+        "line_items[*].description",
+        "line_items[*].vat_rate",
+        "line_items[*].vat_amount",
+    ]
+
+
+def test_golden_accuracy_splits_by_numerals() -> None:
+    rows = [_golden_row("a.png"), _golden_row("b.png", "arabic_indic")]
+    runs = {"a.png": _run(_invoice()), "b.png": _run(_invoice(total="203.00"))}
+
+    table = golden_accuracy(rows, runs)
+
+    assert table["all"]["total"] == [True, False]
+    assert table["latin"]["total"] == [True]
+    assert table["arabic_indic"]["total"] == [False]
+    assert table["arabic_indic"]["line_items[*].unit_price"] == [True]
+    assert set(table["all"]).isdisjoint(unverified_fields())
+
+
+def test_golden_accuracy_scores_a_missed_line_and_unparseable_run_as_wrong() -> None:
+    row = _golden_row()
+    row.expected["line_items.count"] = Decimal(2)
+    row.expected["line_items[1].quantity"] = Decimal(1)
+
+    table = golden_accuracy([row], {"a.png": _run(_invoice())})
+    assert table["all"]["line_items[*].quantity"] == [True, False]
+    assert table["all"]["line_items.count"] == [False]
+
+    table = golden_accuracy([_golden_row()], {"a.png": _run(None)})
+    assert all(flags == [False] for flags in table["all"].values())
+
+
+def test_golden_record_separates_spend_from_cached_cost(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("OPENAI_MODEL", "m")
+    golden = tmp_path / "golden.csv"
+    golden.write_text("x", encoding="utf-8")
+    cached = META.model_copy(
+        update={
+            "cache_hit": True,
+            "estimated_cost_usd": Decimal("0.01"),
+            "latency_ms": 900,
+        }
+    )
+    live = META.model_copy(
+        update={"estimated_cost_usd": Decimal("0.02"), "latency_ms": 100}
+    )
+    rows = [_golden_row("a.png"), _golden_row("b.png", "arabic_indic")]
+    extra_line = _invoice(line_items=[_invoice().line_items[0]] * 2)
+    runs = {
+        "a.png": Run(metadata=cached, fields=flatten(_invoice())),
+        "b.png": Run(metadata=live, fields=flatten(extra_line)),
+    }
+
+    record = golden_record(rows, runs, golden, datetime(2026, 9, 28, tzinfo=UTC))
+
+    totals = record["totals"]
+    assert totals["invoices"] == {"all": 2, "latin": 1, "arabic_indic": 1}
+    assert totals["live_calls"] == 1
+    assert totals["cache_hits"] == 1
+    assert totals["spent_this_run_usd"] == "0.02"
+    assert totals["original_calls_cost_usd"] == "0.03"
+    assert totals["original_call_latency_ms"] == {"mean": 500, "max": 900}
+    assert totals["lines_extra_not_scored"] == 1
+    assert totals["lines_missed"] == 0
+    assert record["accuracy"]["arabic_indic"]["total"] == {"correct": 1, "total": 1}
+    (first, _) = record["invoices"]
+    assert first["fields"]["total"] == {
+        "expected": "230.00",
+        "extracted": "230.00",
+        "match": True,
+    }
+    assert record["model"] == "m"
+    assert "seller_name" not in first["fields"]
+
+
+def test_golden_report_marks_unverified_fields_without_a_figure(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("OPENAI_MODEL", "m")
+    golden = tmp_path / "golden.csv"
+    golden.write_text("x", encoding="utf-8")
+    runs = {"a.png": _run(_invoice(total="1.00"))}
+    record = golden_record([_golden_row()], runs, golden, datetime.now(UTC))
+
+    text = golden_report(record)
+
+    total_row = next(line for line in text.splitlines() if line.startswith("total"))
+    assert total_row.split() == ["total", "0.0%", "(0/1)", "0.0%", "(0/1)", "n/a"]
+    seller = next(line for line in text.splitlines() if "seller_name" in line)
+    assert seller.split() == ["seller_name", "UNVERIFIED"]
+    assert "arabic_indic (n=0)" in text
+    assert "spent_this_run_usd=unknown" in text
+
+
+def test_write_run_record_never_overwrites(tmp_path: Path) -> None:
+    started = datetime(2026, 9, 28, 10, 15, 30, tzinfo=UTC)
+    path = write_run_record({"a": 1}, tmp_path / "runs", started)
+    assert path.name == "20260928T101530Z.json"
+    assert json.loads(path.read_text(encoding="utf-8")) == {"a": 1}
+    with pytest.raises(FileExistsError):
+        write_run_record({"a": 2}, tmp_path / "runs", started)
+
+
+def test_main_golden_rejects_flags_that_would_bypass_the_cache() -> None:
+    for flags in (["--no-cache"], ["--repeats", "2"], ["--dump", "x.json"]):
+        with pytest.raises(SystemExit) as exc:
+            main(["--golden", "g.csv", *flags])
+        assert exc.value.code == 2
+
+
+def test_main_golden_uses_cache_and_writes_record(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    monkeypatch.setenv("OPENAI_MODEL", "m")
+    monkeypatch.setattr(cache, "CACHE_DIR", tmp_path / "cache")
+    monkeypatch.setattr("eval.run_eval.RUNS_DIR", tmp_path / "runs")
+
+    def no_live_calls(*_: object) -> None:
+        raise AssertionError("a cached invoice was sent to the API")
+
+    monkeypatch.setattr(extract, "_call_model", no_live_calls)
+    (tmp_path / "samples").mkdir()
+    image = tmp_path / "samples" / "a.png"
+    image.write_bytes(b"\x89PNG\r\n\x1a\nx")
+    fixture = (Path(__file__).parent / "fixtures" / "response_english.json").read_text(
+        encoding="utf-8"
+    )
+    record = {
+        "content": fixture,
+        "prompt_tokens": 1,
+        "completion_tokens": 1,
+        "latency_ms": 7,
+        "temperature_zero": True,
+    }
+    cache.set(image.read_bytes(), "m", extract.PROMPT_VERSION, record)
+    golden = tmp_path / "golden.csv"
+    cells = {c: "" for c in GOLDEN_COLUMNS} | {
+        "file": "a.png",
+        "numerals": "latin",
+        "subtotal": "1",
+        "vat_total": "1",
+        "total": "1",
+        "line_count": "1",
+        "line1_quantity": "1",
+        "line1_unit_price": "1",
+        "line1_line_total": "1",
+    }
+    golden.write_text(
+        ",".join(GOLDEN_COLUMNS) + "\n" + ",".join(cells.values()) + "\n",
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(
+        "eval.run_eval.load_golden",
+        lambda path: load_golden(path, tmp_path / "samples"),
+    )
+
+    assert main(["--golden", str(golden)]) == 0
+
+    out = capsys.readouterr().out
+    assert "live_calls=0 cache_hits=1" in out
+    (path,) = (tmp_path / "runs").iterdir()
+    written = json.loads(path.read_text(encoding="utf-8"))
+    assert written["totals"]["original_call_latency_ms"]["max"] == 7
+    assert written["invoices"][0]["metadata"]["cache_hit"] is True

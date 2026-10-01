@@ -8,6 +8,8 @@ exact ground truth. Built for measuring extraction accuracy.
 ```
 samples/            30 PNG invoice images
 ground_truth.json   exact field values for every sample
+golden_set.csv      numeric values verified by hand from the images
+runs/               one JSON record per golden-set run
 generate_invoices.py  the generator (regenerate or extend the set)
 fonts/              Amiri and Noto Naskh Arabic (OFL licensed)
 ```
@@ -216,6 +218,39 @@ whose keys matched none of the field paths the prompt specifies. The invoice
 fields in that run were all correct. `run_eval.py` reports such fields as "no
 score from the model" and excludes them from the calibration means. One
 occurrence; recorded so it is not mistaken for a scoring bug if it recurs.
+
+## Golden set
+
+`ground_truth.json` is the generator's own output. `golden_set.csv` is the
+independent check: every value is typed in by hand from the image, never copied
+from `ground_truth.json`. It covers numeric fields only.
+
+One row per invoice, 24 columns:
+
+| Column | Content |
+|---|---|
+| `file` | image name in `samples/` |
+| `numerals` | `latin` or `arabic_indic`, the digits printed on the page |
+| `subtotal`, `vat_total`, `total` | invoice totals |
+| `line_count` | 1 to 6 |
+| `line{1..6}_quantity`, `_unit_price`, `_line_total` | per line; blank past `line_count` |
+
+Values are written in Western digits with `.` as the decimal point, no thousands
+separators and no currency, whatever the invoice prints. The loader rejects
+anything else, and names the line and column.
+
+```bash
+python -m eval.run_eval --golden eval/golden_set.csv [--files ...]
+```
+
+Scores each value by exact match, lines by position, split into all / latin /
+arabic_indic. `line_count` is scored as `line_items.count`; extra lines the model
+invents are counted but not scored. Every other field is listed as UNVERIFIED with
+no accuracy figure. The run always reads `.cache/` first and cannot be combined
+with `--no-cache` or `--repeats`. It writes `runs/<UTC timestamp>.json` with the
+model, prompt version, the CSV's SHA-256, per-invoice expected and extracted
+values, and cost and latency. On a cache hit those describe the original call, so
+the record separates `spent_this_run_usd` from `original_calls_cost_usd`.
 
 ## Regenerating
 

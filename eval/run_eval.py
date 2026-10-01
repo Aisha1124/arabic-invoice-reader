@@ -6,22 +6,38 @@ Responses come from .cache/ unless --no-cache is given. With --repeats N > 1 eve
 image is extracted N times with the cache disabled, and the report adds per-field
 agreement across runs: the model is not guaranteed to be deterministic, and one
 pass hides that.
+
+`--golden eval/golden_set.csv` scores only the hand-verified numeric fields in that
+CSV, split by numeral type, and writes a run record to eval/runs/. It always reads
+from the cache: an invoice already cached is never sent to the API again. Every
+field outside the CSV is reported as UNVERIFIED, with no accuracy figure.
 """
 
 import argparse
+import hashlib
 import json
 import os
 import re
 import sys
+from collections import Counter
 from dataclasses import asdict, dataclass, field
+from datetime import UTC, datetime
 from decimal import Decimal
 from pathlib import Path
 from typing import Any
 
 from app import cache
 from app.extract import PROMPT_VERSION, ParseError, extract, model_name
-from app.schema import CallMetadata, Invoice
-from eval.load_data import Sample, load_samples
+from app.schema import CallMetadata, Invoice, LineItem
+from eval.load_data import (
+    EVAL_DIR,
+    GOLDEN_LINE_FIELDS,
+    GOLDEN_TOTALS,
+    GoldenRow,
+    Sample,
+    load_golden,
+    load_samples,
+)
 
 MAX_UNCONFIRMED_CALLS = 50
 DEFECT_RULES = {
@@ -30,6 +46,11 @@ DEFECT_RULES = {
     "missing_seller_vat": "seller_vat_number_present",
 }
 LINE_INDEX = re.compile(r"line_items\[\d+\]")
+RUNS_DIR = EVAL_DIR / "runs"
+COST_UNKNOWN = (
+    "unknown (set OPENAI_PRICE_INPUT_PER_1M_USD and OPENAI_PRICE_OUTPUT_PER_1M_USD)"
+)
+GOLDEN_GROUPS = ("all", "latin", "arabic_indic")
 
 
 @dataclass
@@ -58,25 +79,23 @@ def _group(path: str) -> str:
     return LINE_INDEX.sub("line_items[*]", path)
 
 
+def _extract_once(image: bytes, file: str, use_cache: bool) -> Run:
+    try:
+        result, metadata = extract(image, use_cache=use_cache)
+    except ParseError as exc:
+        print(f"{file}: unparseable response: {exc}", file=sys.stderr)
+        return Run(metadata=exc.metadata, fields=None)
+    return Run(
+        metadata=metadata,
+        fields=flatten(result.invoice),
+        rules=[f.rule for f in result.findings],
+        confidences={c.field: c.confidence for c in result.confidences},
+    )
+
+
 def run_sample(sample: Sample, repeats: int, use_cache: bool) -> list[Run]:
     image = sample.image_path.read_bytes()
-    runs: list[Run] = []
-    for _ in range(repeats):
-        try:
-            result, metadata = extract(image, use_cache=use_cache)
-        except ParseError as exc:
-            print(f"{sample.meta.file}: unparseable response: {exc}", file=sys.stderr)
-            runs.append(Run(metadata=exc.metadata, fields=None))
-            continue
-        runs.append(
-            Run(
-                metadata=metadata,
-                fields=flatten(result.invoice),
-                rules=[f.rule for f in result.findings],
-                confidences={c.field: c.confidence for c in result.confidences},
-            )
-        )
-    return runs
+    return [_extract_once(image, sample.meta.file, use_cache) for _ in range(repeats)]
 
 
 def accuracy(
@@ -224,8 +243,12 @@ def dump_runs(path: Path, runs: dict[str, list[Run]]) -> None:
 
 
 def _pct(flags: list[bool]) -> str:
-    fraction = f"({sum(flags)}/{len(flags)})"
-    return f"{100 * sum(flags) / len(flags):6.1f}% {fraction:>9}"
+    return _ratio(sum(flags), len(flags))
+
+
+def _ratio(correct: int, total: int) -> str:
+    fraction = f"({correct}/{total})"
+    return f"{100 * correct / total:6.1f}% {fraction:>9}"
 
 
 def report(samples: list[Sample], runs: dict[str, list[Run]], repeats: int) -> str:
@@ -268,21 +291,185 @@ def _summary(samples: list[Sample], all_runs: list[Run], repeats: int) -> list[s
     ]
 
 
-def _total_cost(metas: list[CallMetadata]) -> str:
+def _cost_sum(metas: list[CallMetadata]) -> Decimal | None:
     costs = [m.estimated_cost_usd for m in metas]
     if any(c is None for c in costs):
-        return "unknown (set OPENAI_PRICE_INPUT_PER_1M_USD and OPENAI_PRICE_OUTPUT_PER_1M_USD)"
-    return f"{sum(costs, Decimal(0)):.4f}"
+        return None
+    return sum(costs, Decimal(0))
 
 
-def _planned_calls(samples: list[Sample], repeats: int, use_cache: bool) -> int:
+def _total_cost(metas: list[CallMetadata]) -> str:
+    total = _cost_sum(metas)
+    if total is None:
+        return COST_UNKNOWN
+    return f"{total:.4f}"
+
+
+def unverified_fields() -> list[str]:
+    """Pooled paths the golden set does not cover; they get no accuracy figure."""
+    verified = {
+        *GOLDEN_TOTALS,
+        "line_items.count",
+        *(f"line_items[*].{name}" for name in GOLDEN_LINE_FIELDS),
+    }
+    paths = [name for name in Invoice.model_fields if name != "line_items"]
+    paths += [f"line_items[*].{name}" for name in LineItem.model_fields]
+    return [path for path in paths if path not in verified]
+
+
+def golden_matches(row: GoldenRow, run: Run) -> dict[str, bool]:
+    """Lines are matched by position; a line the model missed reads as None."""
+    fields = run.fields or {}
+    return {path: fields.get(path) == value for path, value in row.expected.items()}
+
+
+def golden_accuracy(
+    rows: list[GoldenRow], runs: dict[str, Run]
+) -> dict[str, dict[str, list[bool]]]:
+    """Per numeral group, per pooled field: one bool per invoice."""
+    table: dict[str, dict[str, list[bool]]] = {group: {} for group in GOLDEN_GROUPS}
+    for row in rows:
+        for path, hit in golden_matches(row, runs[row.file]).items():
+            for group in ("all", row.numerals):
+                table[group].setdefault(_group(path), []).append(hit)
+    return table
+
+
+def _golden_invoice(row: GoldenRow, run: Run) -> dict[str, Any]:
+    fields = run.fields or {}
+    matches = golden_matches(row, run)
+    return {
+        "file": row.file,
+        "numerals": row.numerals,
+        "parsed": run.fields is not None,
+        "expected_line_count": int(row.expected["line_items.count"]),
+        "extracted_line_count": fields.get("line_items.count"),
+        "metadata": run.metadata.model_dump(mode="json") if run.metadata else None,
+        "fields": {
+            path: {
+                "expected": str(value),
+                "extracted": None if fields.get(path) is None else str(fields[path]),
+                "match": matches[path],
+            }
+            for path, value in row.expected.items()
+        },
+    }
+
+
+def _golden_totals(invoices: list[dict[str, Any]], metas: list[CallMetadata]) -> dict:
+    """On a cache hit, cost and latency describe the call that produced the answer."""
+    live = [m for m in metas if not m.cache_hit]
+    spent, original = _cost_sum(live), _cost_sum(metas)
+    latencies = [m.latency_ms for m in metas]
+    gaps = [
+        (i["extracted_line_count"] or 0) - i["expected_line_count"] for i in invoices
+    ]
+    return {
+        "invoices": {"all": len(invoices), **Counter(i["numerals"] for i in invoices)},
+        "unparseable": sum(not i["parsed"] for i in invoices),
+        "live_calls": len(live),
+        "cache_hits": len(metas) - len(live),
+        "spent_this_run_usd": None if spent is None else str(spent),
+        "original_calls_cost_usd": None if original is None else str(original),
+        "original_call_latency_ms": {
+            "mean": round(sum(latencies) / len(latencies)) if latencies else None,
+            "max": max(latencies, default=None),
+        },
+        "lines_missed": -sum(g for g in gaps if g < 0),
+        "lines_extra_not_scored": sum(g for g in gaps if g > 0),
+    }
+
+
+def golden_record(
+    rows: list[GoldenRow], runs: dict[str, Run], golden: Path, started: datetime
+) -> dict[str, Any]:
+    invoices = [_golden_invoice(row, runs[row.file]) for row in rows]
+    metas = [r.metadata for r in runs.values() if r.metadata is not None]
+    accuracy_table = golden_accuracy(rows, runs)
+    return {
+        "timestamp_utc": started.isoformat(),
+        "golden_set": golden.as_posix(),
+        "golden_set_sha256": hashlib.sha256(golden.read_bytes()).hexdigest(),
+        "model": model_name(),
+        "prompt_version": PROMPT_VERSION,
+        "accuracy": {
+            group: {
+                path: {"correct": sum(flags), "total": len(flags)}
+                for path, flags in fields.items()
+            }
+            for group, fields in accuracy_table.items()
+        },
+        "unverified": unverified_fields(),
+        "totals": _golden_totals(invoices, metas),
+        "invoices": invoices,
+    }
+
+
+def write_run_record(record: dict[str, Any], runs_dir: Path, started: datetime) -> Path:
+    runs_dir.mkdir(exist_ok=True)
+    path = runs_dir / f"{started:%Y%m%dT%H%M%SZ}.json"
+    # "x": a record is never overwritten; a clash raises FileExistsError.
+    with path.open("x", encoding="utf-8") as handle:
+        json.dump(record, handle, ensure_ascii=False, indent=1)
+        handle.write("\n")
+    return path
+
+
+def golden_report(record: dict[str, Any]) -> str:
+    counts = record["totals"]["invoices"]
+    header = f"{'field':<28}" + "".join(
+        f"{group} (n={counts.get(group, 0)})".rjust(20) for group in GOLDEN_GROUPS
+    )
+    out = [header, "-" * len(header)]
+    for path in record["accuracy"]["all"]:
+        cells = [record["accuracy"][group].get(path) for group in GOLDEN_GROUPS]
+        out.append(
+            f"{path:<28}"
+            + "".join(
+                (_ratio(c["correct"], c["total"]) if c else "n/a").rjust(20)
+                for c in cells
+            )
+        )
+    out += ["", "not in the golden set (no accuracy figure):"]
+    out += [f"  {path:<28}UNVERIFIED" for path in record["unverified"]]
+    totals = record["totals"]
+    latency = totals["original_call_latency_ms"]
+    out += [
+        "",
+        (
+            f"model={record['model']} prompt_version={record['prompt_version']}"
+            f" unparseable={totals['unparseable']} live_calls={totals['live_calls']}"
+            f" cache_hits={totals['cache_hits']}"
+        ),
+        (
+            f"lines_missed={totals['lines_missed']}"
+            f" lines_extra_not_scored={totals['lines_extra_not_scored']}"
+        ),
+        f"original_call_latency_ms mean={latency['mean']} max={latency['max']}",
+        f"spent_this_run_usd={totals['spent_this_run_usd'] or COST_UNKNOWN}",
+        f"original_calls_cost_usd={totals['original_calls_cost_usd'] or COST_UNKNOWN}",
+    ]
+    return "\n".join(out)
+
+
+def _planned_calls(images: list[Path], repeats: int, use_cache: bool) -> int:
     if not use_cache:
-        return len(samples) * repeats
+        return len(images) * repeats
     model = model_name()
     return sum(
-        cache.get(s.image_path.read_bytes(), model, PROMPT_VERSION) is None
-        for s in samples
+        cache.get(image.read_bytes(), model, PROMPT_VERSION) is None for image in images
     )
+
+
+def _over_budget(planned: int, confirmed: bool) -> bool:
+    if planned > MAX_UNCONFIRMED_CALLS and not confirmed:
+        print(
+            f"this run would make {planned} API calls (limit {MAX_UNCONFIRMED_CALLS}"
+            " without --confirm-spend); stopping",
+            file=sys.stderr,
+        )
+        return True
+    return False
 
 
 def _parse_args(argv: list[str] | None) -> argparse.Namespace:
@@ -304,31 +491,68 @@ def _parse_args(argv: list[str] | None) -> argparse.Namespace:
     parser.add_argument(
         "--dump", type=Path, metavar="PATH", help="write raw per-run results as JSON"
     )
+    parser.add_argument(
+        "--golden",
+        type=Path,
+        metavar="CSV",
+        help="score the hand-verified golden set and write a record to eval/runs/",
+    )
     args = parser.parse_args(argv)
     if args.repeats < 1:
         parser.error("--repeats must be at least 1")
+    if args.golden and (args.no_cache or args.repeats != 1 or args.dump):
+        parser.error(
+            "--golden always reads the cache and writes its own run record;"
+            " it cannot be combined with --no-cache, --repeats or --dump"
+        )
     if args.files:
-        known = {s.meta.file for s in load_samples()}
-        unknown = [f for f in args.files if f not in known]
-        if unknown:
-            parser.error(f"not in ground truth: {', '.join(unknown)}")
+        _check_files(parser, args.files, args.golden)
     return args
+
+
+def _check_files(
+    parser: argparse.ArgumentParser, files: list[str], golden: Path | None
+) -> None:
+    if golden:
+        known = {r.file for r in load_golden(golden)}
+    else:
+        known = {s.meta.file for s in load_samples()}
+    unknown = [f for f in files if f not in known]
+    if unknown:
+        parser.error(f"not in {golden or 'ground truth'}: {', '.join(unknown)}")
+
+
+def run_golden(golden: Path, files: list[str] | None, confirmed: bool) -> int:
+    rows = load_golden(golden)
+    if files:
+        rows = [r for r in rows if r.file in files]
+    planned = _planned_calls([r.image_path for r in rows], 1, use_cache=True)
+    if _over_budget(planned, confirmed):
+        return 2
+    print(f"planned API calls: {planned} (cache on)", file=sys.stderr)
+    started = datetime.now(UTC)
+    runs = {
+        r.file: _extract_once(r.image_path.read_bytes(), r.file, True) for r in rows
+    }
+    record = golden_record(rows, runs, golden, started)
+    path = write_run_record(record, RUNS_DIR, started)
+    print(golden_report(record))
+    print(f"run record: {path}")
+    return 0
 
 
 def main(argv: list[str] | None = None) -> int:
     args = _parse_args(argv)
+    if args.golden:
+        return run_golden(args.golden, args.files, args.confirm_spend)
     samples = load_samples()
     if args.files:
         by_file = {s.meta.file: s for s in samples}
         samples = [by_file[f] for f in args.files]
     use_cache = not args.no_cache and args.repeats == 1
-    planned = _planned_calls(samples, args.repeats, use_cache)
-    if planned > MAX_UNCONFIRMED_CALLS and not args.confirm_spend:
-        print(
-            f"this run would make {planned} API calls (limit {MAX_UNCONFIRMED_CALLS}"
-            " without --confirm-spend); stopping",
-            file=sys.stderr,
-        )
+    images = [s.image_path for s in samples]
+    planned = _planned_calls(images, args.repeats, use_cache)
+    if _over_budget(planned, args.confirm_spend):
         return 2
     print(
         f"planned API calls: {planned} (cache {'on' if use_cache else 'off'})",

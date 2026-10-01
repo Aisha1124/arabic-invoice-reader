@@ -1,0 +1,606 @@
+{
+ "model": "gpt-4o",
+ "lines": [
+  {
+   "line_id": "1e59e1d7-ad9e-4a4a-b315-7a675ab95dfd_line_13",
+   "expected": [
+    "13.43",
+    "0.270",
+    "49.75"
+   ],
+   "n1_answer": [
+    "12,43",
+    "0,270",
+    "49,75"
+   ],
+   "n1_digits_only": false,
+   "n2_answer_as_copied": [
+    "٤٩٫٧٥",
+    "٠٫٢٧٠",
+    "١٢٫٤٣"
+   ],
+   "n2_answer": [
+    "49٫75",
+    "0٫270",
+    "12٫43"
+   ],
+   "n2_digits_only": false
+  },
+  {
+   "line_id": "1e59e1d7-ad9e-4a4a-b315-7a675ab95dfd_line_19",
+   "expected": [
+    "19.75",
+    "5",
+    "3.95",
+    "15"
+   ],
+   "n1_answer": [
+    "19,75",
+    "0",
+    "3,95",
+    "15",
+    "0"
+   ],
+   "n1_digits_only": false,
+   "n2_answer_as_copied": [
+    "١٩٫٧٥",
+    "٠",
+    "٣٫٩٥",
+    "١٥"
+   ],
+   "n2_answer": [
+    "19٫75",
+    "0",
+    "3٫95",
+    "15"
+   ],
+   "n2_digits_only": false
+  },
+  {
+   "line_id": "1e59e1d7-ad9e-4a4a-b315-7a675ab95dfd_line_20",
+   "expected": [
+    "19.75",
+    "5",
+    "3.95",
+    "15"
+   ],
+   "n1_answer": [
+    "19,75",
+    "0",
+    "2,95",
+    "15"
+   ],
+   "n1_digits_only": false,
+   "n2_answer_as_copied": [
+    "١٩٫٧٥",
+    "٠",
+    "٢٫٩٥",
+    "١٥"
+   ],
+   "n2_answer": [
+    "19٫75",
+    "0",
+    "2٫95",
+    "15"
+   ],
+   "n2_digits_only": false
+  },
+  {
+   "line_id": "1e59e1d7-ad9e-4a4a-b315-7a675ab95dfd_line_27",
+   "expected": [
+    "000.00"
+   ],
+   "n1_answer": [
+    "1.000,00"
+   ],
+   "n1_digits_only": false,
+   "n2_answer_as_copied": [
+    "١٠٠٠٫٠٠"
+   ],
+   "n2_answer": [
+    "1000٫00"
+   ],
+   "n2_digits_only": false
+  },
+  {
+   "line_id": "1f220e57-4a7e-4d85-b382-9998960ebde5_total",
+   "expected": [
+    "159,00",
+    "1"
+   ],
+   "n1_answer": [
+    "109",
+    "1",
+    "2,99"
+   ],
+   "n1_digits_only": false,
+   "n2_answer_as_copied": [
+    "١٦٩٫٠٠",
+    "٢٫٠٠"
+   ],
+   "n2_answer": [
+    "169٫00",
+    "2٫00"
+   ],
+   "n2_digits_only": false
+  },
+  {
+   "line_id": "234d352d-5051-4fec-ac5d-a5212a5b9077_line_10",
+   "expected": [
+    "10.00",
+    "1",
+    "10.00",
+    "135"
+   ],
+   "n1_answer": [
+    "10000",
+    "1",
+    "125",
+    "10000"
+   ],
+   "n1_digits_only": false,
+   "n2_answer_as_copied": [
+    "١٠٠٠٠",
+    "١",
+    "١٢٥",
+    "١٠٠٠٠"
+   ],
+   "n2_answer": [
+    "10000",
+    "1",
+    "125",
+    "10000"
+   ],
+   "n2_digits_only": false
+  },
+  {
+   "line_id": "30ca174a-4c67-474a-ab45-70000fc283f7_line_9",
+   "expected": [
+    "37.00"
+   ],
+   "n1_answer": [
+    "47,00"
+   ],
+   "n1_digits_only": false,
+   "n2_answer_as_copied": [
+    "٤٧٫٠٠"
+   ],
+   "n2_answer": [
+    "47٫00"
+   ],
+   "n2_digits_only": false
+  },
+  {
+   "line_id": "35058950-8985-46e5-bfef-30d37a225a09_total",
+   "expected": [
+    "120"
+   ],
+   "n1_answer": [
+    "120"
+   ],
+   "n1_digits_only": true,
+   "n2_answer_as_copied": [
+    "١٢٫٠"
+   ],
+   "n2_answer": [
+    "12٫0"
+   ],
+   "n2_digits_only": true
+  },
+  {
+   "line_id": "3aaa9f60-3fef-43d5-8a92-3f25ce86b5aa_line_4",
+   "expected": [
+    "102.85"
+   ],
+   "n1_answer": [
+    "10,85"
+   ],
+   "n1_digits_only": false,
+   "n2_answer_as_copied": [
+    "١٠٫٨٥"
+   ],
+   "n2_answer": [
+    "10٫85"
+   ],
+   "n2_digits_only": false
+  },
+  {
+   "line_id": "3b998526-3059-4809-8239-0436eeed1f16_line_190",
+   "expected": [
+    "48.00",
+    "12.00"
+   ],
+   "n1_answer": [
+    "48,00",
+    "12,00"
+   ],
+   "n1_digits_only": true,
+   "n2_answer_as_copied": [
+    "١٢٫٠٠",
+    "٤٨٫٠٠"
+   ],
+   "n2_answer": [
+    "12٫00",
+    "48٫00"
+   ],
+   "n2_digits_only": true
+  },
+  {
+   "line_id": "3e0dadc1-b903-4aad-adec-ea8ff8a7704b_total",
+   "expected": [
+    "142,00"
+   ],
+   "n1_answer": [
+    "1.420,00"
+   ],
+   "n1_digits_only": false,
+   "n2_answer_as_copied": [
+    "١٤٢٫٠٠"
+   ],
+   "n2_answer": [
+    "142٫00"
+   ],
+   "n2_digits_only": true
+  },
+  {
+   "line_id": "46ccec20-4679-4479-a74b-9c110002c342_line_22",
+   "expected": [
+    "80.00",
+    "1.00"
+   ],
+   "n1_answer": [
+    "1,00",
+    "1.000"
+   ],
+   "n1_digits_only": false,
+   "n2_answer_as_copied": [
+    "١٠٠٫٠٠",
+    "١٫٠٠"
+   ],
+   "n2_answer": [
+    "100٫00",
+    "1٫00"
+   ],
+   "n2_digits_only": false
+  },
+  {
+   "line_id": "513ee063-3e78-4e93-bb5d-979c7a03b634_line_14",
+   "expected": [
+    "19,6",
+    "140",
+    "0,14"
+   ],
+   "n1_answer": [
+    "19,6",
+    "140",
+    "0,14"
+   ],
+   "n1_digits_only": true,
+   "n2_answer_as_copied": [
+    "١٤٫٠",
+    "١٤٠",
+    "١٩٫٦"
+   ],
+   "n2_answer": [
+    "14٫0",
+    "140",
+    "19٫6"
+   ],
+   "n2_digits_only": false
+  },
+  {
+   "line_id": "5742ff8b-ebdb-4d93-b900-3b4154b71a47_line_4",
+   "expected": [
+    "0.00",
+    "0.00"
+   ],
+   "n1_answer": [
+    "0,00",
+    "0,00"
+   ],
+   "n1_digits_only": true,
+   "n2_answer_as_copied": [
+    "0.00",
+    "٠٫٠٠"
+   ],
+   "n2_answer": [
+    "0.00",
+    "0٫00"
+   ],
+   "n2_digits_only": true
+  },
+  {
+   "line_id": "5e76093c-6633-45aa-ae80-57e9c8152a64_line_8",
+   "expected": [
+    "60,00"
+   ],
+   "n1_answer": [
+    "6,00"
+   ],
+   "n1_digits_only": false,
+   "n2_answer_as_copied": [
+    "٦٠٠٫٠٠"
+   ],
+   "n2_answer": [
+    "600٫00"
+   ],
+   "n2_digits_only": false
+  },
+  {
+   "line_id": "5e76093c-6633-45aa-ae80-57e9c8152a64_total",
+   "expected": [
+    "60.00"
+   ],
+   "n1_answer": [
+    "6.000"
+   ],
+   "n1_digits_only": true,
+   "n2_answer_as_copied": [
+    "٦٠٠٠"
+   ],
+   "n2_answer": [
+    "6000"
+   ],
+   "n2_digits_only": true
+  },
+  {
+   "line_id": "5eab8fa8-c05e-45a3-bf23-a6a84858bbfc_total",
+   "expected": [
+    "25.00",
+    "1"
+   ],
+   "n1_answer": [
+    "1",
+    "250,00"
+   ],
+   "n1_digits_only": false,
+   "n2_answer_as_copied": [
+    "١",
+    "٢٥٫٠٠"
+   ],
+   "n2_answer": [
+    "1",
+    "25٫00"
+   ],
+   "n2_digits_only": true
+  },
+  {
+   "line_id": "72cd3d0c-aa67-47cc-ab4c-cee00ad70520_line_32",
+   "expected": [
+    "192,984",
+    "27,016",
+    "220,000"
+   ],
+   "n1_answer": [
+    "192,984",
+    "37,012",
+    "220,000"
+   ],
+   "n1_digits_only": false,
+   "n2_answer_as_copied": [
+    "٢٣٠,٠٠٠",
+    "٣٧,٠١٢",
+    "١٩٢,٩٨٤"
+   ],
+   "n2_answer": [
+    "230,000",
+    "37,012",
+    "192,984"
+   ],
+   "n2_digits_only": false
+  },
+  {
+   "line_id": "87f88557-53ac-4f56-9947-fe501f37b6a0_line_16",
+   "expected": [
+    "38.00",
+    "12.50",
+    "2.24"
+   ],
+   "n1_answer": [
+    "280,00",
+    "12,50",
+    "2,74"
+   ],
+   "n1_digits_only": false,
+   "n2_answer_as_copied": [
+    "٢٫٠٤",
+    "١٢٫٥٠",
+    "٢٨٫٠٠"
+   ],
+   "n2_answer": [
+    "2٫04",
+    "12٫50",
+    "28٫00"
+   ],
+   "n2_digits_only": false
+  },
+  {
+   "line_id": "8ea4e42d-d8d0-4952-be1f-441e6f38049f_line_18",
+   "expected": [
+    "0,00"
+   ],
+   "n1_answer": [
+    "0,00"
+   ],
+   "n1_digits_only": true,
+   "n2_answer_as_copied": [
+    "٠٠٠"
+   ],
+   "n2_answer": [
+    "000"
+   ],
+   "n2_digits_only": true
+  },
+  {
+   "line_id": "a93ca0c6-0eef-40e1-8c59-5e1962793bc7_line_11",
+   "expected": [
+    "9.21"
+   ],
+   "n1_answer": [
+    "9,1"
+   ],
+   "n1_digits_only": false,
+   "n2_answer_as_copied": [
+    "٩٫١"
+   ],
+   "n2_answer": [
+    "9٫1"
+   ],
+   "n2_digits_only": false
+  },
+  {
+   "line_id": "af595b90-3cb0-443a-bcd1-e6b57e3d013e_line_22",
+   "expected": [
+    "16,10"
+   ],
+   "n1_answer": [
+    "10,6"
+   ],
+   "n1_digits_only": false,
+   "n2_answer_as_copied": [
+    "١٦٫١٠"
+   ],
+   "n2_answer": [
+    "16٫10"
+   ],
+   "n2_digits_only": true
+  },
+  {
+   "line_id": "bd7503e4-b7fe-4459-a0f0-8f1b2eeac3a2_line_12",
+   "expected": [
+    "132,19"
+   ],
+   "n1_answer": [
+    "132,19"
+   ],
+   "n1_digits_only": true,
+   "n2_answer_as_copied": [
+    "١٣٣٫٩"
+   ],
+   "n2_answer": [
+    "133٫9"
+   ],
+   "n2_digits_only": false
+  },
+  {
+   "line_id": "bfdadbc6-987f-4c8f-84fe-3dce712dc37c_line_12",
+   "expected": [
+    "3,00"
+   ],
+   "n1_answer": [
+    "3,000"
+   ],
+   "n1_digits_only": false,
+   "n2_answer_as_copied": [
+    "٣٬٠٠٠"
+   ],
+   "n2_answer": [
+    "3٬000"
+   ],
+   "n2_digits_only": false
+  },
+  {
+   "line_id": "c464e16b-3c11-446a-840d-2ae28287fdd6_line_9",
+   "expected": [
+    "84.00",
+    "84.00",
+    "0",
+    "1"
+   ],
+   "n1_answer": [
+    "48,00",
+    "48,00",
+    "1"
+   ],
+   "n1_digits_only": false,
+   "n2_answer_as_copied": [
+    "٤٥٫٠٠",
+    "٤٥٫٠٠",
+    "١"
+   ],
+   "n2_answer": [
+    "45٫00",
+    "45٫00",
+    "1"
+   ],
+   "n2_digits_only": false
+  },
+  {
+   "line_id": "cd04e50d-a3f8-4591-bdf2-02bbea78c3dc_line_100",
+   "expected": [
+    "1",
+    "5",
+    "5"
+   ],
+   "n1_answer": [
+    "1",
+    "0"
+   ],
+   "n1_digits_only": false,
+   "n2_answer_as_copied": [
+    "٠٫٥",
+    "١"
+   ],
+   "n2_answer": [
+    "0٫5",
+    "1"
+   ],
+   "n2_digits_only": false
+  },
+  {
+   "line_id": "ddf23862-d134-4c10-8b03-ba0068c66536_line_100",
+   "expected": [
+    "150,00",
+    "1,00"
+   ],
+   "n1_answer": [
+    "100",
+    "15,00"
+   ],
+   "n1_digits_only": false,
+   "n2_answer_as_copied": [
+    "١٠٠",
+    "١٥٬٠٠٠"
+   ],
+   "n2_answer": [
+    "100",
+    "15٬000"
+   ],
+   "n2_digits_only": true
+  },
+  {
+   "line_id": "eae3ee5a-b08c-48bc-a9b4-02266137e764_line_20",
+   "expected": [
+    "31,76"
+   ],
+   "n1_answer": [
+    "31,76"
+   ],
+   "n1_digits_only": true,
+   "n2_answer_as_copied": [
+    "٣١٫٧٦"
+   ],
+   "n2_answer": [
+    "31٫76"
+   ],
+   "n2_digits_only": true
+  },
+  {
+   "line_id": "f77aad43-f49e-4d27-8c2d-1d78b951b04c_line_220",
+   "expected": [
+    "12.00"
+   ],
+   "n1_answer": [
+    "12,00"
+   ],
+   "n1_digits_only": true,
+   "n2_answer_as_copied": [
+    "١٢٫٠٠"
+   ],
+   "n2_answer": [
+    "12٫00"
+   ],
+   "n2_digits_only": true
+  }
+ ]
+}
