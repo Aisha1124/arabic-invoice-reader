@@ -98,7 +98,7 @@
   .run-details { margin: 0; margin-inline-start: auto; font-size: 13px; color: var(--muted); }
 
   /* Workspace: image on the start side, results on the end side */
-  .workspace { display: grid; grid-template-columns: minmax(280px, 5fr) 7fr; gap: var(--s6); align-items: start; margin-block-start: var(--s5); }
+  .workspace { display: grid; grid-template-columns: minmax(0, 43fr) minmax(0, 57fr); gap: var(--s6); align-items: start; margin-block-start: var(--s5); }
   .workspace.no-preview { grid-template-columns: 1fr; }
   .preview { position: sticky; inset-block-start: var(--s4); background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); }
   .preview summary { padding: var(--s3) var(--s4); font-weight: 600; cursor: pointer; }
@@ -116,19 +116,37 @@
     .preview .frame { max-block-size: 70vh; }
   }
 
-  /* Findings */
-  .findings { display: grid; gap: var(--s3); }
-  .finding { border: 1px solid var(--line); border-inline-start-width: 4px; border-radius: 6px; padding: var(--s3) var(--s4); background: var(--surface); }
-  .finding.error { border-inline-start-color: var(--fail); }
-  .finding.warning { border-inline-start-color: var(--warn); }
-  .finding .head { display: flex; align-items: center; gap: var(--s3); margin-block-end: var(--s1); }
-  .finding code { font-size: 13px; }
-  .tag { font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em; padding: 2px 7px; border-radius: 4px; }
-  .tag.error { color: var(--fail); background: var(--fail-bg); }
-  .tag.warning { color: var(--warn); background: var(--warn-bg); }
-  .finding .msg { color: var(--muted); font-size: 14px; }
-  .finding code.rule { display: block; margin-block-start: var(--s1); color: var(--muted); font-size: 12px; }
+  /* Issues: one per failure, icon + word + colour */
+  .issues { list-style: none; margin: 0; padding: 0; display: grid; gap: var(--s2); }
+  .issue { display: flex; align-items: flex-start; gap: var(--s3); background: var(--surface); border: 1px solid var(--line); border-radius: 6px; padding: var(--s3) var(--s4); }
+  .issue .chip { font-size: 13px; }
+  .issue .body { flex: 1; min-inline-size: 0; }
+  .issue .sentence { margin: 0; font-weight: 500; }
+  .issue .locate { display: inline-block; margin-block-start: var(--s1); font-size: 14px; color: var(--queued); }
+  .issue details { margin-block-start: var(--s1); font-size: 13px; color: var(--muted); }
+  .issue summary { cursor: pointer; inline-size: fit-content; }
+  .issue .rule { display: block; margin-block-start: var(--s1); font-size: 12px; }
+  .issue .msg { margin: var(--s1) 0 0; overflow-wrap: anywhere; }
+  .issues .none { color: var(--muted); }
+  .located { outline: 3px solid var(--queued); outline-offset: -3px; }
   .none { color: var(--muted); }
+
+  /* Resolver panel */
+  .resolver-box { background: var(--surface); border: 1px solid var(--line); border-inline-start-width: 4px; border-radius: var(--radius); padding: var(--s4) var(--s5); }
+  .resolver-box.queued { border-inline-start-color: var(--queued); }
+  .resolver-box.neutral { border-inline-start-color: var(--neutral); }
+  .resolver-box.failed { border-inline-start-color: var(--fail); }
+  .resolver-box h3 { display: flex; align-items: center; gap: var(--s2); margin: 0 0 var(--s1); font-size: 16px; }
+  .resolver-box.queued h3 { color: var(--queued); }
+  .resolver-box.neutral h3 { color: var(--neutral); }
+  .resolver-box.failed h3 { color: var(--fail); }
+  .resolver-box > p { margin: 0 0 var(--s3); }
+  .resolver-box table { margin-block-end: var(--s3); }
+  .resolver-box .first td { background: var(--queued-bg); }
+  .val { display: block; font-size: 17px; font-weight: 600; font-variant-numeric: tabular-nums; }
+  .val-ar { display: block; font-size: 13px; color: var(--muted); }
+  .chip.small { font-size: 12px; padding: 0 var(--s2); }
+  .chip.queued { color: var(--queued); background: var(--queued-bg); }
 
   /* Tables */
   table { border-collapse: collapse; inline-size: 100%; }
@@ -160,6 +178,7 @@
   .review { background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); padding: var(--s4) var(--s5); }
   .review .top { display: flex; align-items: baseline; gap: var(--s3); flex-wrap: wrap; margin-block-end: var(--s3); }
   .review .when { color: var(--muted); font-size: 13px; }
+  .tag { font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em; padding: 2px 7px; border-radius: 4px; }
   .tag.suggested { color: var(--queued); background: var(--queued-bg); }
   .tag.ambiguous, .tag.unresolvable { color: var(--neutral); background: var(--neutral-bg); }
   .banner { border-inline-start: 4px solid var(--neutral); background: var(--neutral-bg); padding: var(--s2) var(--s3); border-radius: 4px; margin: var(--s2) 0 var(--s3); font-size: 14px; }
@@ -240,8 +259,13 @@
     </aside>
 
     <div id="details" hidden>
-      <h2>Findings</h2>
-      <div class="findings" id="findings"></div>
+      <h2>Issues</h2>
+      <div id="issues"></div>
+
+      <section id="resolver" hidden>
+        <h2>Resolver</h2>
+        <div id="resolver-box"></div>
+      </section>
 
       <h2>Arithmetic checks</h2>
       <section class="block checkmap" id="checkmap"></section>
@@ -401,6 +425,81 @@ function verdict(result) {
   return { state: "failed", word: "Needs review", reference, sentence: `${counts.join(" and ")}${plus}. ${next}` };
 }
 
+// The cell each arithmetic check is about: where "Show in table" lands.
+const CHECK_CELLS = {
+  line_total_equals_quantity_times_unit_price: "line_total",
+  vat_amount_equals_line_total_times_vat_rate: "vat_amount",
+  subtotal_equals_sum_of_line_totals: "subtotal",
+  vat_total_equals_sum_of_vat_amounts: "vat_total",
+  total_equals_subtotal_plus_vat_total: "total",
+};
+const LINE_CHECKS = new Set(["line_total_equals_quantity_times_unit_price", "vat_amount_equals_line_total_times_vat_rate"]);
+
+// line is 0-based, or null for the totals.
+function checkCell(rule, line) {
+  const cell = CHECK_CELLS[rule];
+  if (cell === undefined) return null;
+  return line === null ? cell : `line_items[${line}].${cell}`;
+}
+
+// One issue per finding, for the extract screen.
+function issuesFromFindings(findings) {
+  return findings.map((f) => {
+    const line = LINE_CHECKS.has(f.rule) ? lineNumber(f.fields) - 1 : null;
+    return {
+      severity: f.severity,
+      sentence: plainFinding(f.rule, f.fields),
+      rule: f.rule,
+      message: f.message,
+      target: checkCell(f.rule, line) || f.fields.find((x) => x !== "line_items") || null,
+    };
+  });
+}
+
+// One issue per failed check, for a review item. Items queued before check results
+// were stored have only the resolver's labels.
+function issuesFromChecks(checks, labels) {
+  if (checks === null) {
+    return labels.map((label) => ({ severity: "error", sentence: plainCheck(label), rule: label, message: null, target: null }));
+  }
+  return checks.filter((c) => c.outcome === "fail").map((c) => ({
+    severity: "error",
+    sentence: RULE_SENTENCES[c.rule](c.line === null ? null : c.line + 1),
+    rule: c.rule,
+    message: null,
+    target: checkCell(c.rule, c.line),
+  }));
+}
+
+// What the extract screen says about the resolver, from the response's review field
+// and the pending item (undefined once it has been decided). Candidates are values
+// consistent with the checks: suggestions for a person, never presented as the answer.
+function resolverPanel(review, item) {
+  if (review === null) return null;
+  if (review.status === "error") {
+    return { tone: "failed", title: "The resolver failed", candidates: [],
+      text: "Nothing was queued. The issues above still stand: check the invoice against the paper." };
+  }
+  if (!item) {
+    return { tone: "neutral", title: `${review.reference} is no longer pending`, candidates: [],
+      text: "It has been decided in the review queue. A decision is recorded; it does not change this result." };
+  }
+  const candidates = item.candidates.map((c) => ({
+    rank: c.rank, field: plainField(c.field), read: c.read_value, value: c.value, arabic: arabicIndic(c.value),
+    why: EDITS[c.edit] || c.edit, label: "Consistent with checks", first: item.status === "suggested" && c.rank === 1,
+  }));
+  if (item.status === "suggested") {
+    return { tone: "queued", title: "Values consistent with the checks", candidates,
+      text: "Each value would make every check on its cell add up. They are ranked by the kinds of digit misreads seen in testing; a person decides against the paper invoice." };
+  }
+  if (item.status === "ambiguous") {
+    return { tone: "neutral", title: "More than one value fits equally", candidates,
+      text: "The arithmetic fits more than one reading and nothing separates them, so none is ranked first. Check the paper invoice." };
+  }
+  return { tone: "neutral", title: "No single value explains the failed checks", candidates: [],
+    text: `This is expected when more than one value is misread: ${item.reason}. Check every number against the paper invoice, not only those in failed checks.` };
+}
+
 // Model, latency and source, from the audit row written for this extraction.
 function runDetails(audit) {
   if (!audit) return "Run details unavailable";
@@ -494,8 +593,9 @@ async function submit(file) {
       showError(`HTTP ${response.status}`, text);
       return;
     }
-    render(JSON.parse(text), await auditRow(await sha256(file)));
-    await loadReviews();
+    const result = JSON.parse(text);
+    render(result, await auditRow(await sha256(file)));
+    renderResolver(result.review, await loadReviews());
   } catch (err) {
     showError("Request failed", err.message);
   } finally {
@@ -558,36 +658,6 @@ function render(result, audit) {
   renderVerdict(result, audit);
   document.getElementById("checkmap").replaceChildren(checkMapTable(result.checks));
 
-  const findings = document.getElementById("findings");
-  findings.replaceChildren();
-  if (result.findings.length === 0) {
-    const p = document.createElement("div");
-    p.className = "none";
-    p.textContent = "No findings. The extraction is internally consistent, which is not the same as verified.";
-    findings.append(p);
-  }
-  for (const f of result.findings) {
-    const card = document.createElement("div");
-    card.className = `finding ${f.severity}`;
-    const head = document.createElement("div");
-    head.className = "head";
-    const sentence = document.createElement("strong");
-    sentence.textContent = plainFinding(f.rule, f.fields);
-    const tag = document.createElement("span");
-    tag.className = `tag ${f.severity}`;
-    tag.textContent = f.severity;
-    head.append(sentence, tag);
-    const msg = document.createElement("div");
-    msg.className = "msg";
-    msg.textContent = f.message;
-    // The rule name stays available for reference, under the details.
-    const rule = document.createElement("code");
-    rule.className = "rule";
-    rule.textContent = f.rule;
-    card.append(head, msg, rule);
-    findings.append(card);
-  }
-
   const header = document.getElementById("header");
   header.replaceChildren();
   for (const [key, label, numeric] of HEADER_FIELDS) {
@@ -595,7 +665,7 @@ function render(result, audit) {
     const th = document.createElement("th");
     th.className = "key";
     th.textContent = label;
-    row.append(th, valueCell(inv[key], flagged.has(key), numeric));
+    row.append(th, valueCell(inv[key], flagged.has(key), numeric, `cell-${key}`));
     header.append(row);
   }
 
@@ -608,12 +678,112 @@ function render(result, audit) {
     index.textContent = i + 1;
     row.append(index);
     for (const [key, numeric] of LINE_FIELDS) {
-      row.append(valueCell(line[key], flagged.has(`line_items[${i}].${key}`), numeric));
+      const path = `line_items[${i}].${key}`;
+      row.append(valueCell(line[key], flagged.has(path), numeric, `cell-${path}`));
     }
     lines.append(row);
   });
+  // After the tables, so each "Show in table" link can check its cell exists.
+  document.getElementById("issues").replaceChildren(issuesList(issuesFromFindings(result.findings), "cell-"));
   document.getElementById("result").hidden = false;
   document.getElementById("details").hidden = false;
+}
+
+const SEVERITY = { error: ["failed", "Error"], warning: ["warnings", "Warning"] };
+
+// The Issues list, shared by the extract screen and review detail. A "Show in table"
+// link appears only when the cell it points at is on the page (ids are prefix + path).
+function issuesList(issues, prefix) {
+  const list = el("ol", "issues");
+  if (issues.length === 0) list.append(el("li", "none", "No issues."));
+  for (const issue of issues) {
+    const [state, word] = SEVERITY[issue.severity];
+    const chip = el("span", `chip ${state}`);
+    chip.append(icon(STATE_ICONS[state]), word);
+    const body = el("div", "body");
+    body.append(el("p", "sentence", issue.sentence));
+    const cell = issue.target && document.getElementById(prefix + issue.target);
+    if (cell) {
+      const link = el("a", "locate", "Show in table");
+      link.href = `#${cell.id}`;
+      link.addEventListener("click", (e) => { e.preventDefault(); locate(cell); });
+      body.append(link);
+    }
+    const more = el("details");
+    more.append(el("summary", "", "Details"), el("code", "rule", issue.rule));
+    if (issue.message) more.append(el("p", "msg", issue.message));
+    body.append(more);
+    const li = el("li", "issue");
+    li.append(chip, body);
+    list.append(li);
+  }
+  return list;
+}
+
+function locate(cell) {
+  cell.closest("details")?.setAttribute("open", "");
+  document.querySelector(".located")?.classList.remove("located");
+  cell.classList.add("located");
+  cell.tabIndex = -1;
+  cell.scrollIntoView({ block: "center" });
+  cell.focus({ preventScroll: true });
+}
+
+const TONE_ICONS = { queued: "queued", neutral: "none", failed: "fail" };
+
+// items is the pending queue, or null when it could not be loaded.
+function renderResolver(review, items) {
+  const section = document.getElementById("resolver");
+  const box = document.getElementById("resolver-box");
+  const queued = review !== null && review.status === "queued";
+  const panel = queued && items === null
+    ? { tone: "neutral", title: "The review queue could not be loaded", text: `${review.reference} was queued; open the review queue to see it.`, candidates: [] }
+    : resolverPanel(review, queued ? items.find((i) => i.reference === review.reference) : undefined);
+  section.hidden = panel === null;
+  if (panel === null) return;
+  box.className = `resolver-box ${panel.tone}`;
+  const title = el("h3");
+  title.append(icon(TONE_ICONS[panel.tone]), panel.title);
+  box.replaceChildren(title, el("p", "", panel.text));
+  if (panel.candidates.length) box.append(candidateTable(panel.candidates));
+  if (queued) {
+    const open = el("button", "btn", `Open ${review.reference} in the review queue`);
+    open.type = "button";
+    open.addEventListener("click", () => showTab("review"));
+    box.append(open);
+  }
+}
+
+function candidateTable(candidates) {
+  const table = el("table");
+  const head = el("tr");
+  for (const h of ["#", "Field", "Read", "Consistent with checks", "Why"]) head.append(el("th", "", h));
+  const thead = el("thead");
+  thead.append(head);
+  const body = el("tbody");
+  for (const c of candidates) {
+    const row = el("tr", c.first ? "first" : "");
+    const rank = el("td", "num", String(c.rank));
+    if (c.first) {
+      const chip = el("span", "chip small queued", "Ranked first");
+      rank.append(" ", chip);
+    }
+    const value = el("td", "num");
+    value.append(ltr("val", c.value), el("span", "val-ar", `${c.arabic} in Arabic-Indic digits`));
+    const read = el("td", "num");
+    read.append(ltr("", c.read));
+    row.append(rank, el("td", "", c.field), read, value, el("td", "", c.why));
+    body.append(row);
+  }
+  table.append(thead, body);
+  return table;
+}
+
+// Numbers stay left-to-right inside any surrounding direction.
+function ltr(className, text) {
+  const span = el("span", className, text);
+  span.dir = "ltr";
+  return span;
 }
 
 document.getElementById("copy-ref").addEventListener("click", async () => {
@@ -827,8 +997,9 @@ async function decide(item, body, cardNode) {
 
 loadReviews();
 
-function valueCell(value, isFlagged, numeric) {
+function valueCell(value, isFlagged, numeric, id) {
   const td = document.createElement("td");
+  td.id = id;
   // dir=auto lets each cell take its direction from its own first strong character,
   // so Arabic renders right-to-left inside a left-to-right table.
   td.dir = "auto";

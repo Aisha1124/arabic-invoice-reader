@@ -13,9 +13,9 @@ from pathlib import Path
 
 import pytest
 
-from app.resolve import _checks
+from app.resolve import _checks, resolve
 from app.schema import Invoice, LineItem, ReviewOutcome
-from app.validate import validate
+from app.validate import ARITHMETIC_CHECKS, validate
 
 ROOT = Path(__file__).resolve().parent.parent
 PAGE = (ROOT / "static" / "index.html").read_text(encoding="utf-8")
@@ -128,13 +128,6 @@ def test_findings_and_review_cards_use_the_same_words() -> None:
 
     assert from_cards == _sentences(findings)
     assert "Line 3: quantity × unit price does not equal the line total" in from_cards
-
-
-def test_extract_tab_headlines_the_sentence_and_keeps_the_rule() -> None:
-    script = PAGE[PAGE.index('<script id="wording">') :]
-    main = script[script.index("</script>") :]
-    assert "plainFinding(f.rule, f.fields)" in main
-    assert "f.rule" in main.replace("plainFinding(f.rule, f.fields)", "")
 
 
 # --- pipeline strip and check map ------------------------------------------------
@@ -421,3 +414,187 @@ def test_preview_is_a_local_object_url_revoked_on_the_next_upload() -> None:
     assert "URL.revokeObjectURL(" in PAGE
     assert PAGE.index("URL.revokeObjectURL(") < PAGE.index("URL.createObjectURL(")
     assert "not stored" in PAGE
+
+
+# --- step 3: issues list and resolver panel -----------------------------------------
+
+# Where "Show in table" lands for each rule: the cell the check is about.
+TARGETS = {
+    "line_total_equals_quantity_times_unit_price": "line_items[0].line_total",
+    "vat_amount_equals_line_total_times_vat_rate": "line_items[0].vat_amount",
+    "subtotal_equals_sum_of_line_totals": "subtotal",
+    "vat_total_equals_sum_of_vat_amounts": "vat_total",
+    "total_equals_subtotal_plus_vat_total": "total",
+    "totals_present_without_line_items": "subtotal",
+    "invoice_date_matches_timestamp": "invoice_date",
+    "seller_vat_number_present": "seller_vat_number",
+    "seller_vat_number_is_15_digits": "seller_vat_number",
+    "standard_invoice_has_buyer_vat_number": "buyer_vat_number",
+    "vat_is_itemised_per_line": "vat_total",
+    "simplified_invoice_has_qr_fields": "seller_name",
+}
+# The fields validate.py puts on each rule's finding, in its order.
+FINDING_FIELDS = {
+    "line_total_equals_quantity_times_unit_price": [
+        "line_items[0].quantity",
+        "line_items[0].unit_price",
+        "line_items[0].line_total",
+    ],
+    "vat_amount_equals_line_total_times_vat_rate": [
+        "line_items[0].line_total",
+        "line_items[0].vat_rate",
+        "line_items[0].vat_amount",
+    ],
+    "subtotal_equals_sum_of_line_totals": ["subtotal", "line_items[0].line_total"],
+    "vat_total_equals_sum_of_vat_amounts": ["vat_total", "line_items[0].vat_amount"],
+    "total_equals_subtotal_plus_vat_total": ["subtotal", "vat_total", "total"],
+    "totals_present_without_line_items": ["line_items", "subtotal", "total"],
+    "invoice_date_matches_timestamp": ["invoice_date", "invoice_timestamp"],
+    "seller_vat_number_present": ["seller_vat_number"],
+    "seller_vat_number_is_15_digits": ["seller_vat_number"],
+    "standard_invoice_has_buyer_vat_number": ["buyer_vat_number"],
+    "vat_is_itemised_per_line": ["vat_total", "line_items[0].vat_amount"],
+    "simplified_invoice_has_qr_fields": ["seller_name", "total"],
+}
+
+
+def _issues(call: str) -> list[dict]:
+    return _run(f"console.log(JSON.stringify({call}))")
+
+
+def test_finding_fields_cover_every_rule() -> None:
+    assert sorted(FINDING_FIELDS) == RULES == sorted(TARGETS)
+
+
+def test_every_rule_becomes_one_plain_issue_with_a_table_target() -> None:
+    findings = [
+        {
+            "rule": r,
+            "severity": "error",
+            "message": f"m-{r}",
+            "fields": FINDING_FIELDS[r],
+        }
+        for r in RULES
+    ]
+
+    issues = _issues(f"issuesFromFindings({json.dumps(findings)})")
+
+    assert len(issues) == len(RULES)
+    for rule, issue in zip(RULES, issues, strict=True):
+        assert issue["rule"] == rule
+        assert issue["target"] == TARGETS[rule], rule
+        assert issue["message"] == f"m-{rule}"
+        assert "_" not in issue["sentence"], issue
+
+
+def test_issues_from_checks_match_issues_from_findings() -> None:
+    """A review item's issues come from its stored checks, the extract screen's
+    from findings; the same failure must read the same and point at the same cell."""
+    body = _response(MISREAD)
+    arithmetic = [f for f in body["findings"] if f["rule"] in ARITHMETIC_CHECKS]
+
+    from_findings = _issues(f"issuesFromFindings({json.dumps(arithmetic)})")
+    from_checks = _issues(f"issuesFromChecks({json.dumps(body['checks'])}, [])")
+
+    def key(i: dict) -> tuple:
+        return (i["sentence"], i["target"], i["severity"])
+
+    assert [key(i) for i in from_checks] == [key(i) for i in from_findings]
+    assert from_checks[0]["sentence"] == (
+        "Line 1: quantity × unit price does not equal the line total"
+    )
+
+
+def test_legacy_review_items_fall_back_to_their_stored_labels() -> None:
+    issues = _issues('issuesFromChecks(null, ["sum of line totals = subtotal"])')
+
+    assert issues == [
+        {
+            "severity": "error",
+            "sentence": "The line totals do not add up to the subtotal",
+            "rule": "sum of line totals = subtotal",
+            "message": None,
+            "target": None,
+        }
+    ]
+
+
+def _one_line(unit_price: str, total: str = "46.33") -> Invoice:
+    """3 x 13.43 = 40.29; unit_price 12.43 is the ٣→٢ misread."""
+    return Invoice(
+        invoice_type="standard",
+        line_items=[_line("3", unit_price, "40.29", "6.04")],
+        subtotal="40.29",
+        vat_total="6.04",
+        total=total,
+    )
+
+
+def _item(invoice: Invoice) -> dict:
+    """A review item as GET /reviews returns it, from the real resolver."""
+    item = resolve(invoice).model_dump(mode="json")
+    item["reference"] = "R-0007"
+    return item
+
+
+AMBIGUOUS = Invoice(
+    invoice_type="standard",
+    line_items=[_line("5", "5.00", "10.00", "1.50")],
+    subtotal="10.00",
+    vat_total="1.50",
+    total="11.50",
+)
+
+
+def _panel(review: ReviewOutcome | None, item: dict | None) -> dict | None:
+    r = json.dumps(review.model_dump(mode="json") if review else None)
+    return _run(f"console.log(JSON.stringify(resolverPanel({r}, {json.dumps(item)})))")
+
+
+def test_resolver_panel_states() -> None:
+    suggested = _item(_one_line("12.43"))
+    ambiguous = _item(AMBIGUOUS)
+    unresolvable = _item(_one_line("12.43", total="99.99"))
+    assert [i["status"] for i in (suggested, ambiguous, unresolvable)] == [
+        "suggested",
+        "ambiguous",
+        "unresolvable",
+    ]
+
+    assert _panel(None, None) is None
+
+    s = _panel(_queued("suggested"), suggested)
+    assert s["tone"] == "queued"
+    first = s["candidates"][0]
+    assert first["label"] == "Consistent with checks"
+    assert first["first"] is True
+    assert (first["field"], first["read"], first["value"]) == (
+        "Line 1 · unit price",
+        "12.43",
+        "13.43",
+    )
+    assert first["arabic"] == "١٣٫٤٣"
+
+    a = _panel(_queued("ambiguous"), ambiguous)
+    assert a["tone"] == "neutral"
+    assert len(a["candidates"]) > 1
+    assert not any(c["first"] for c in a["candidates"])
+
+    u = _panel(_queued("unresolvable"), unresolvable)
+    assert (u["tone"], u["candidates"]) == ("neutral", [])
+    assert "expected" in u["text"]
+
+    gone = _panel(_queued("suggested"), None)
+    assert gone["tone"] == "neutral" and "R-0007" in gone["title"]
+
+    err = _panel(ReviewOutcome(status="error"), None)
+    assert err["tone"] == "failed"
+
+    for panel in (s, a, u, gone, err):
+        assert "correct" not in json.dumps(panel).lower(), panel
+
+
+def test_page_never_calls_a_candidate_correct() -> None:
+    assert "Consistent with checks" in PAGE
+    assert not re.search(r"\bcorrect(ion|ed)?\b", PAGE, re.IGNORECASE)
+    assert "Show in table" in PAGE
