@@ -27,7 +27,7 @@ from typing import Any, Literal
 
 from app import store
 from app.resolve import LINE_CELLS, TOTAL_CELLS
-from app.schema import CheckOutcome, Resolution, ReviewItem
+from app.schema import CheckOutcome, CheckStatus, Resolution, ReviewItem
 
 Decision = Literal["accepted", "rejected", "checked_manually"]
 
@@ -137,7 +137,12 @@ def submit(
             **resolution.model_dump(include={"status", "reason", "failed_checks"}),
             candidates=resolution.candidates,
             involved=resolution.involved,
-            checks=checks,
+            # The queue keeps the values read in the failed checks (involved) and
+            # no more, so the computed values and differences are dropped here.
+            checks=[
+                CheckStatus(**c.model_dump(include=set(CheckStatus.model_fields)))
+                for c in checks
+            ],
         )
         conn.execute(INSERT_QUEUE.replace("?", placeholder), _to_db(item))
         store.insert_resolver_event(conn, placeholder, _submitted_event(item))

@@ -6,7 +6,7 @@ from pathlib import Path
 import pytest
 
 from app import validate as validate_module
-from app.schema import ExtractionResult, Finding, Invoice, LineItem
+from app.schema import CheckOutcome, ExtractionResult, Finding, Invoice, LineItem
 from app.validate import validate
 
 SELLER_VAT = "300000000000003"
@@ -792,3 +792,64 @@ def test_failed_checks_match_the_arithmetic_findings_exactly(invoice: Invoice) -
     }
     failed = {(c.rule, c.line) for c in result.checks if c.outcome == "fail"}
     assert failed == from_findings
+
+
+# --- computed values and differences, for the totals block -----------------------
+
+
+def _check(result: ExtractionResult, rule: str, line: int | None) -> CheckOutcome:
+    (check,) = [c for c in result.checks if (c.rule, c.line) == (rule, line)]
+    return check
+
+
+def test_each_check_carries_its_computed_value_and_difference() -> None:
+    """Difference is read minus computed, so a positive figure means the invoice
+    shows more than its parts add up to."""
+    lines = [_line("2", "100.00", line_total="250.00"), _line("1", "50.00")]
+    result = _run(
+        _invoice(
+            lines,
+            subtotal=Decimal("250.00"),
+            vat_total=Decimal("37.50"),
+            total=Decimal("290.00"),
+        )
+    )
+
+    expected = {
+        (QTY, 0): ("200.00", "50.00"),
+        (LINE_VAT, 0): ("37.5000", "-7.5000"),  # 250.00 x 0.15, read 30.00
+        (QTY, 1): ("50.00", "0.00"),
+        (LINE_VAT, 1): ("7.5000", "0.0000"),
+        (SUBTOTAL, None): ("300.00", "-50.00"),  # 250.00 + 50.00, read 250.00
+        (VAT_SUM, None): ("37.5000", "0.0000"),
+        (GRAND, None): ("287.50", "2.50"),
+    }
+    for (rule, line), (computed, difference) in expected.items():
+        check = _check(result, rule, line)
+        assert (check.computed, check.difference) == (
+            Decimal(computed),
+            Decimal(difference),
+        ), (rule, line)
+
+
+def test_passing_checks_carry_computed_values_too() -> None:
+    result = _run(_invoice())
+
+    assert all(c.computed is not None for c in result.checks)
+    assert all(abs(c.difference) <= Decimal("0.01") for c in result.checks)
+
+
+def test_not_checked_carries_no_computed_value() -> None:
+    result = _run(_broken_lumped_vat())
+
+    skipped = [c for c in result.checks if c.outcome == "not_checked"]
+    assert skipped
+    assert all(c.computed is None and c.difference is None for c in skipped)
+
+
+def test_computed_values_are_exact_decimals() -> None:
+    result = _run(_invoice([_line("3", "13.43", vat_amount="6.04")]))
+
+    vat = _check(result, LINE_VAT, 0)
+    assert vat.computed == Decimal("40.29") * Decimal("0.15")
+    assert isinstance(vat.computed, Decimal)

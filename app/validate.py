@@ -1,5 +1,6 @@
 import re
 from decimal import Decimal
+from typing import NamedTuple
 
 from app.schema import (
     CheckOutcome,
@@ -31,6 +32,15 @@ LUMPED = "VAT is lumped: no line carries its own VAT amount"
 NO_LINES = "no line items were read"
 
 
+class Ran(NamedTuple):
+    """An arithmetic check that ran: what the other cells add up to, the value read
+    against it, and the finding when the two differ by more than TOLERANCE."""
+
+    computed: Decimal
+    read: Decimal
+    finding: Finding | None
+
+
 def _within_tolerance(expected: Decimal, actual: Decimal) -> bool:
     return abs(expected - actual) <= TOLERANCE
 
@@ -50,11 +60,11 @@ def _is_lumped_vat(invoice: Invoice) -> bool:
     )
 
 
-def _check_line_total(prefix: str, line: LineItem) -> Finding | None:
+def _check_line_total(prefix: str, line: LineItem) -> Ran:
     expected = line.quantity * line.unit_price
     if _within_tolerance(expected, line.line_total):
-        return None
-    return Finding(
+        return Ran(expected, line.line_total, None)
+    finding = Finding(
         rule="line_total_equals_quantity_times_unit_price",
         severity="error",
         message=(
@@ -63,13 +73,14 @@ def _check_line_total(prefix: str, line: LineItem) -> Finding | None:
         ),
         fields=[f"{prefix}.quantity", f"{prefix}.unit_price", f"{prefix}.line_total"],
     )
+    return Ran(expected, line.line_total, finding)
 
 
-def _check_line_vat(prefix: str, line: LineItem) -> Finding | None:
+def _check_line_vat(prefix: str, line: LineItem) -> Ran:
     expected = line.line_total * line.vat_rate
     if _within_tolerance(expected, line.vat_amount):
-        return None
-    return Finding(
+        return Ran(expected, line.vat_amount, None)
+    finding = Finding(
         rule="vat_amount_equals_line_total_times_vat_rate",
         severity="error",
         message=(
@@ -78,17 +89,18 @@ def _check_line_vat(prefix: str, line: LineItem) -> Finding | None:
         ),
         fields=[f"{prefix}.line_total", f"{prefix}.vat_rate", f"{prefix}.vat_amount"],
     )
+    return Ran(expected, line.vat_amount, finding)
 
 
-def _check_subtotal(invoice: Invoice) -> Finding | str | None:
+def _check_subtotal(invoice: Invoice) -> Ran | str:
     if not invoice.line_items:
         return NO_LINES
     if invoice.subtotal is None:
         return "subtotal not read"
     line_sum = sum((line.line_total for line in invoice.line_items), Decimal(0))
     if _within_tolerance(line_sum, invoice.subtotal):
-        return None
-    return Finding(
+        return Ran(line_sum, invoice.subtotal, None)
+    finding = Finding(
         rule="subtotal_equals_sum_of_line_totals",
         severity="error",
         message=(
@@ -100,9 +112,10 @@ def _check_subtotal(invoice: Invoice) -> Finding | str | None:
             *(f"line_items[{i}].line_total" for i in range(len(invoice.line_items))),
         ],
     )
+    return Ran(line_sum, invoice.subtotal, finding)
 
 
-def _check_vat_sum(invoice: Invoice) -> Finding | str | None:
+def _check_vat_sum(invoice: Invoice) -> Ran | str:
     if not invoice.line_items:
         return NO_LINES
     if _is_lumped_vat(invoice):
@@ -111,8 +124,8 @@ def _check_vat_sum(invoice: Invoice) -> Finding | str | None:
         return "vat_total not read"
     vat_sum = sum((line.vat_amount for line in invoice.line_items), Decimal(0))
     if _within_tolerance(vat_sum, invoice.vat_total):
-        return None
-    return Finding(
+        return Ran(vat_sum, invoice.vat_total, None)
+    finding = Finding(
         rule="vat_total_equals_sum_of_vat_amounts",
         severity="error",
         message=(
@@ -124,6 +137,7 @@ def _check_vat_sum(invoice: Invoice) -> Finding | str | None:
             *(f"line_items[{i}].vat_amount" for i in range(len(invoice.line_items))),
         ],
     )
+    return Ran(vat_sum, invoice.vat_total, finding)
 
 
 def _check_totals_have_line_items(invoice: Invoice) -> Finding | None:
@@ -168,7 +182,7 @@ def _check_date_matches_timestamp(invoice: Invoice) -> Finding | None:
     )
 
 
-def _check_grand_total(invoice: Invoice) -> Finding | str | None:
+def _check_grand_total(invoice: Invoice) -> Ran | str:
     if invoice.subtotal is None or invoice.vat_total is None or invoice.total is None:
         missing = [
             n for n in ("subtotal", "vat_total", "total") if getattr(invoice, n) is None
@@ -176,8 +190,8 @@ def _check_grand_total(invoice: Invoice) -> Finding | str | None:
         return f"{', '.join(missing)} not read"
     expected = invoice.subtotal + invoice.vat_total
     if _within_tolerance(expected, invoice.total):
-        return None
-    return Finding(
+        return Ran(expected, invoice.total, None)
+    finding = Finding(
         rule="total_equals_subtotal_plus_vat_total",
         severity="error",
         message=(
@@ -186,6 +200,7 @@ def _check_grand_total(invoice: Invoice) -> Finding | str | None:
         ),
         fields=["subtotal", "vat_total", "total"],
     )
+    return Ran(expected, invoice.total, finding)
 
 
 def _check_seller_vat_present(invoice: Invoice) -> Finding | None:
@@ -282,11 +297,11 @@ def _check_simplified_qr_fields(invoice: Invoice) -> Finding | None:
 
 
 def _arithmetic(invoice: Invoice) -> tuple[list[Finding], list[CheckOutcome]]:
-    """Every arithmetic check, in check-map order. Each check returns a Finding when
-    it fails, None when it passes, or the reason it could not run; a check that did
-    not run is recorded as not_checked, never left out where it would read as a pass."""
+    """Every arithmetic check, in check-map order. Each check returns what it ran
+    (Ran) or the reason it could not run; a check that did not run is recorded as
+    not_checked, never left out where it would read as a pass."""
     lumped = LUMPED if _is_lumped_vat(invoice) else None
-    ran: list[tuple[str, int | None, Finding | str | None]] = []
+    ran: list[tuple[str, int | None, Ran | str]] = []
     for i, line in enumerate(invoice.line_items):
         prefix = f"line_items[{i}]"
         ran.append((LINE_TOTAL, i, _check_line_total(prefix, line)))
@@ -294,16 +309,20 @@ def _arithmetic(invoice: Invoice) -> tuple[list[Finding], list[CheckOutcome]]:
     ran.append((SUBTOTAL_SUM, None, _check_subtotal(invoice)))
     ran.append((VAT_SUM, None, _check_vat_sum(invoice)))
     ran.append((GRAND_TOTAL, None, _check_grand_total(invoice)))
-    findings = [result for _, _, result in ran if isinstance(result, Finding)]
+    findings = [r.finding for _, _, r in ran if isinstance(r, Ran) and r.finding]
     return findings, [_outcome(rule, line, result) for rule, line, result in ran]
 
 
-def _outcome(rule: str, line: int | None, result: Finding | str | None) -> CheckOutcome:
-    if isinstance(result, Finding):
-        return CheckOutcome(rule=rule, line=line, outcome="fail")
+def _outcome(rule: str, line: int | None, result: Ran | str) -> CheckOutcome:
     if isinstance(result, str):
         return CheckOutcome(rule=rule, line=line, outcome="not_checked", reason=result)
-    return CheckOutcome(rule=rule, line=line, outcome="pass")
+    return CheckOutcome(
+        rule=rule,
+        line=line,
+        outcome="fail" if result.finding else "pass",
+        computed=result.computed,
+        difference=result.read - result.computed,
+    )
 
 
 def validate(invoice: Invoice, confidences: dict[str, float]) -> ExtractionResult:

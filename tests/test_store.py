@@ -192,3 +192,18 @@ def test_audit_row_is_frozen() -> None:
     with pytest.raises(AttributeError):
         row.model = "other"  # type: ignore[misc]
     assert isinstance(row, AuditRow)
+
+
+def test_audit_row_carries_no_computed_check_values() -> None:
+    result = _result()
+    grand = next(c for c in result.checks if c.rule.startswith("total_equals"))
+    assert (grand.computed, grand.difference) == (
+        Decimal("43028.78"),
+        Decimal("56971.21"),
+    )
+
+    serialised = json.dumps(audit_row(SHA, result, _metadata()).__dict__)
+
+    for amount in ("43028.78", "56971.21", "5612.4495"):
+        assert amount not in serialised, amount
+    assert "computed" not in serialised and "difference" not in serialised

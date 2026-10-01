@@ -80,7 +80,8 @@ POST /extract (raw PNG/JPEG body, ≤10 MB, in memory only)
       app/review.py  review_queue row (amounts and field paths only) + reference R-0042
       app/store.py   append-only resolver event (no amounts)
   → JSON response (200 for both "ok" and "needs_review"), with `checks` (every arithmetic
-    check: pass, fail or not checked, and why) and `review` (null, queued with its
+    check: pass, fail or not checked and why, with the computed value and the
+    difference read − computed; the review queue keeps the outcome, not the amounts) and `review` (null, queued with its
     reference, or error); the page draws these as the pipeline strip and check map
 
 GET  /reviews                       pending reviews

@@ -239,7 +239,19 @@ def test_review_card_carries_the_same_check_outcomes_as_the_extraction(
     body = _upload(client)
 
     (item,) = _reviews(client)
-    assert item["checks"] == body["checks"]
+    without_amounts = [
+        {k: v for k, v in c.items() if k not in ("computed", "difference")}
+        for c in body["checks"]
+    ]
+    assert {k for c in item["checks"] for k in c} == {
+        "rule",
+        "line",
+        "outcome",
+        "reason",
+    }
+    assert item["checks"] == without_amounts
+    qty = body["checks"][0]
+    assert (qty["computed"], qty["difference"]) == ("37.29", "3.00")  # 3 x 12.43
     failed = [(c["rule"], c["line"]) for c in item["checks"] if c["outcome"] == "fail"]
     assert failed == [("line_total_equals_quantity_times_unit_price", 0)]
 

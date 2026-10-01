@@ -8,7 +8,7 @@ import pytest
 
 from app import review, store
 from app.resolve import resolve
-from app.schema import Invoice, LineItem, Reading, Resolution
+from app.schema import CheckStatus, Invoice, LineItem, Reading, Resolution
 from app.store import read_resolver_events
 from app.validate import validate
 
@@ -40,8 +40,12 @@ def _invoice(unit_price: str = "12.43", total: str = "46.33") -> Invoice:
     )
 
 
-# The check outcomes validate.py produced for the default misread.
+# The check outcomes validate.py produced for the default misread, and the same
+# outcomes as the queue keeps them: without computed values or differences.
 CHECKS = validate(_invoice(), {}).checks
+STORED = [
+    CheckStatus(**c.model_dump(exclude={"computed", "difference"})) for c in CHECKS
+]
 
 
 @pytest.fixture(autouse=True)
@@ -303,7 +307,8 @@ def test_check_outcomes_are_stored_and_returned() -> None:
     review.submit(AUDIT_ID, SHA, resolve(_invoice()), CHECKS)
 
     (item,) = review.pending()
-    assert item.checks == CHECKS
+    assert item.checks == STORED
+    assert any(c.computed is not None for c in CHECKS)
     by_cell = {(c.rule, c.line): c.outcome for c in item.checks}
     assert by_cell[("line_total_equals_quantity_times_unit_price", 0)] == "fail"
     assert by_cell[("subtotal_equals_sum_of_line_totals", None)] == "pass"
@@ -361,4 +366,4 @@ def test_queue_created_before_check_outcomes_is_migrated(db: Path) -> None:
 
     other_sha = hashlib.sha256(b"other image").hexdigest()
     review.submit(AUDIT_ID, other_sha, resolve(_invoice()), CHECKS)
-    assert [item.checks for item in review.pending()] == [None, CHECKS]
+    assert [item.checks for item in review.pending()] == [None, STORED]

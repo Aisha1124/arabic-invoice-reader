@@ -59,14 +59,22 @@ class Finding(BaseModel):
     fields: list[str]
 
 
-class CheckOutcome(BaseModel):
-    """One arithmetic check as validate.py ran it, or why it did not run. Rule names
-    and line positions only, never amounts: review_queue stores these."""
+class CheckStatus(BaseModel):
+    """One arithmetic check's result, or why it did not run. Rule names and line
+    positions only, never amounts: this is what review_queue stores."""
 
     rule: str
     line: int | None  # 0-based line index for per-line checks, None for the totals
     outcome: Literal["pass", "fail", "not_checked"]
     reason: str | None = None  # set when not_checked
+
+
+class CheckOutcome(CheckStatus):
+    """A CheckStatus with its amounts, for the /extract response only. Nothing logs
+    checks."""
+
+    computed: Decimal | None = None  # what the other cells in the check add up to
+    difference: Decimal | None = None  # the value read minus computed
 
 
 class ExtractionResult(BaseModel):
@@ -142,7 +150,7 @@ class ReviewItem(BaseModel):
     failed_checks: list[str]
     candidates: list[Candidate]
     involved: list[Reading]
-    checks: list[CheckOutcome] | None  # None: queued before check outcomes were stored
+    checks: list[CheckStatus] | None  # None: queued before check outcomes were stored
 
 
 class CallMetadata(BaseModel):
