@@ -1,7 +1,14 @@
 import re
 from decimal import Decimal
 
-from app.schema import ExtractionResult, FieldConfidence, Finding, Invoice, LineItem
+from app.schema import (
+    CheckOutcome,
+    ExtractionResult,
+    FieldConfidence,
+    Finding,
+    Invoice,
+    LineItem,
+)
 
 TOLERANCE = Decimal("0.01")
 # ASCII digits only: `\d` and str.isdigit() also accept Arabic-Indic digits.
@@ -9,6 +16,19 @@ SELLER_VAT_PATTERN = re.compile(r"[0-9]{15}")
 # Seller VAT is the fifth TLV field; it is required on every invoice type, so
 # seller_vat_number_present covers it rather than this simplified-only check.
 SIMPLIFIED_QR_FIELDS = ("seller_name", "invoice_timestamp", "total", "vat_total")
+# In check-map column order. The Finding(rule=...) literals below repeat these names;
+# tests/test_validate.py holds the two in step.
+ARITHMETIC_CHECKS = (
+    "line_total_equals_quantity_times_unit_price",
+    "vat_amount_equals_line_total_times_vat_rate",
+    "subtotal_equals_sum_of_line_totals",
+    "vat_total_equals_sum_of_vat_amounts",
+    "total_equals_subtotal_plus_vat_total",
+)
+LINE_TOTAL, LINE_VAT, SUBTOTAL_SUM, VAT_SUM, GRAND_TOTAL = ARITHMETIC_CHECKS
+# Reasons a check did not run. They name conditions, never amounts.
+LUMPED = "VAT is lumped: no line carries its own VAT amount"
+NO_LINES = "no line items were read"
 
 
 def _within_tolerance(expected: Decimal, actual: Decimal) -> bool:
@@ -60,54 +80,50 @@ def _check_line_vat(prefix: str, line: LineItem) -> Finding | None:
     )
 
 
-def _check_line_arithmetic(
-    index: int, line: LineItem, check_vat: bool
-) -> list[Finding]:
-    prefix = f"line_items[{index}]"
-    checks = [_check_line_total(prefix, line)]
-    if check_vat:
-        checks.append(_check_line_vat(prefix, line))
-    return [f for f in checks if f is not None]
-
-
-def _check_sums_against_lines(invoice: Invoice, check_vat: bool) -> list[Finding]:
+def _check_subtotal(invoice: Invoice) -> Finding | str | None:
     if not invoice.line_items:
-        return []
-    line_fields = [f"line_items[{i}]" for i in range(len(invoice.line_items))]
-    findings: list[Finding] = []
+        return NO_LINES
+    if invoice.subtotal is None:
+        return "subtotal not read"
     line_sum = sum((line.line_total for line in invoice.line_items), Decimal(0))
-    if invoice.subtotal is not None and not _within_tolerance(
-        line_sum, invoice.subtotal
-    ):
-        findings.append(
-            Finding(
-                rule="subtotal_equals_sum_of_line_totals",
-                severity="error",
-                message=(
-                    f"sum of line_total values is {line_sum},"
-                    f" but subtotal is {invoice.subtotal}"
-                ),
-                fields=["subtotal", *(f"{f}.line_total" for f in line_fields)],
-            )
-        )
-    if not check_vat:
-        return findings
+    if _within_tolerance(line_sum, invoice.subtotal):
+        return None
+    return Finding(
+        rule="subtotal_equals_sum_of_line_totals",
+        severity="error",
+        message=(
+            f"sum of line_total values is {line_sum},"
+            f" but subtotal is {invoice.subtotal}"
+        ),
+        fields=[
+            "subtotal",
+            *(f"line_items[{i}].line_total" for i in range(len(invoice.line_items))),
+        ],
+    )
+
+
+def _check_vat_sum(invoice: Invoice) -> Finding | str | None:
+    if not invoice.line_items:
+        return NO_LINES
+    if _is_lumped_vat(invoice):
+        return LUMPED
+    if invoice.vat_total is None:
+        return "vat_total not read"
     vat_sum = sum((line.vat_amount for line in invoice.line_items), Decimal(0))
-    if invoice.vat_total is not None and not _within_tolerance(
-        vat_sum, invoice.vat_total
-    ):
-        findings.append(
-            Finding(
-                rule="vat_total_equals_sum_of_vat_amounts",
-                severity="error",
-                message=(
-                    f"sum of vat_amount values is {vat_sum},"
-                    f" but vat_total is {invoice.vat_total}"
-                ),
-                fields=["vat_total", *(f"{f}.vat_amount" for f in line_fields)],
-            )
-        )
-    return findings
+    if _within_tolerance(vat_sum, invoice.vat_total):
+        return None
+    return Finding(
+        rule="vat_total_equals_sum_of_vat_amounts",
+        severity="error",
+        message=(
+            f"sum of vat_amount values is {vat_sum},"
+            f" but vat_total is {invoice.vat_total}"
+        ),
+        fields=[
+            "vat_total",
+            *(f"line_items[{i}].vat_amount" for i in range(len(invoice.line_items))),
+        ],
+    )
 
 
 def _check_totals_have_line_items(invoice: Invoice) -> Finding | None:
@@ -152,9 +168,12 @@ def _check_date_matches_timestamp(invoice: Invoice) -> Finding | None:
     )
 
 
-def _check_grand_total(invoice: Invoice) -> Finding | None:
+def _check_grand_total(invoice: Invoice) -> Finding | str | None:
     if invoice.subtotal is None or invoice.vat_total is None or invoice.total is None:
-        return None
+        missing = [
+            n for n in ("subtotal", "vat_total", "total") if getattr(invoice, n) is None
+        ]
+        return f"{', '.join(missing)} not read"
     expected = invoice.subtotal + invoice.vat_total
     if _within_tolerance(expected, invoice.total):
         return None
@@ -262,6 +281,31 @@ def _check_simplified_qr_fields(invoice: Invoice) -> Finding | None:
     )
 
 
+def _arithmetic(invoice: Invoice) -> tuple[list[Finding], list[CheckOutcome]]:
+    """Every arithmetic check, in check-map order. Each check returns a Finding when
+    it fails, None when it passes, or the reason it could not run; a check that did
+    not run is recorded as not_checked, never left out where it would read as a pass."""
+    lumped = LUMPED if _is_lumped_vat(invoice) else None
+    ran: list[tuple[str, int | None, Finding | str | None]] = []
+    for i, line in enumerate(invoice.line_items):
+        prefix = f"line_items[{i}]"
+        ran.append((LINE_TOTAL, i, _check_line_total(prefix, line)))
+        ran.append((LINE_VAT, i, lumped or _check_line_vat(prefix, line)))
+    ran.append((SUBTOTAL_SUM, None, _check_subtotal(invoice)))
+    ran.append((VAT_SUM, None, _check_vat_sum(invoice)))
+    ran.append((GRAND_TOTAL, None, _check_grand_total(invoice)))
+    findings = [result for _, _, result in ran if isinstance(result, Finding)]
+    return findings, [_outcome(rule, line, result) for rule, line, result in ran]
+
+
+def _outcome(rule: str, line: int | None, result: Finding | str | None) -> CheckOutcome:
+    if isinstance(result, Finding):
+        return CheckOutcome(rule=rule, line=line, outcome="fail")
+    if isinstance(result, str):
+        return CheckOutcome(rule=rule, line=line, outcome="not_checked", reason=result)
+    return CheckOutcome(rule=rule, line=line, outcome="pass")
+
+
 def validate(invoice: Invoice, confidences: dict[str, float]) -> ExtractionResult:
     """
     `confidences` maps field paths (e.g. "total", "line_items[0].vat_amount") to the
@@ -271,14 +315,9 @@ def validate(invoice: Invoice, confidences: dict[str, float]) -> ExtractionResul
     invoice: a warning means the invoice itself is non-compliant, and a human must
     still see that.
     """
-    findings: list[Finding] = []
-    check_vat = not _is_lumped_vat(invoice)
-    for index, line in enumerate(invoice.line_items):
-        findings.extend(_check_line_arithmetic(index, line, check_vat))
-    findings.extend(_check_sums_against_lines(invoice, check_vat))
+    findings, checks = _arithmetic(invoice)
     whole_invoice = (
         _check_totals_have_line_items(invoice),
-        _check_grand_total(invoice),
         _check_date_matches_timestamp(invoice),
         _check_seller_vat_present(invoice),
         _check_seller_vat_format(invoice),
@@ -300,4 +339,5 @@ def validate(invoice: Invoice, confidences: dict[str, float]) -> ExtractionResul
         ],
         findings=findings,
         status="needs_review" if findings else "ok",
+        checks=checks,
     )

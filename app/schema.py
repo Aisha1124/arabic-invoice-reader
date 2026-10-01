@@ -59,11 +59,90 @@ class Finding(BaseModel):
     fields: list[str]
 
 
+class CheckOutcome(BaseModel):
+    """One arithmetic check as validate.py ran it, or why it did not run. Rule names
+    and line positions only, never amounts: review_queue stores these."""
+
+    rule: str
+    line: int | None  # 0-based line index for per-line checks, None for the totals
+    outcome: Literal["pass", "fail", "not_checked"]
+    reason: str | None = None  # set when not_checked
+
+
 class ExtractionResult(BaseModel):
     invoice: Invoice
     confidences: list[FieldConfidence]
     findings: list[Finding]
     status: Literal["ok", "needs_review"]
+    checks: list[CheckOutcome]
+
+
+class ReviewOutcome(BaseModel):
+    """What /extract did about review: queued (with the reference to write on the
+    paper invoice), or the resolver or queue failed."""
+
+    status: Literal["queued", "error"]
+    reference: str | None = None
+    resolver_status: Literal["suggested", "ambiguous", "unresolvable"] | None = None
+
+
+class ExtractResponse(ExtractionResult):
+    review: ReviewOutcome | None  # None: no arithmetic finding, nothing to resolve
+
+
+Edit = Literal[
+    "known_substitution",
+    "adjacent_swap",
+    "digit_added",
+    "digit_dropped",
+    "other_substitution",
+    "other",
+]
+
+
+class Candidate(BaseModel):
+    """A value one cell would need for the invoice arithmetic to pass. A suggestion
+    for a person to accept or reject; never applied automatically."""
+
+    field: str
+    read_value: Decimal
+    value: Decimal
+    edit: Edit  # how value differs from read_value, digit by digit
+    rank: int
+
+
+class Reading(BaseModel):
+    """A value as the model read it, for a cell in a failed check."""
+
+    field: str
+    read_value: Decimal
+
+
+class Resolution(BaseModel):
+    status: Literal["not_needed", "suggested", "ambiguous", "unresolvable"]
+    # reason and failed_checks name fields and checks, never amounts: they are logged.
+    reason: str
+    failed_checks: list[str]
+    candidates: list[Candidate]
+    # Every cell in the failed checks as read: what a reviewer checks against paper.
+    involved: list[Reading] = []
+
+
+class ReviewItem(BaseModel):
+    """A pending review. Amounts and field paths only: no names, VAT numbers,
+    descriptions or images."""
+
+    id: str
+    reference: str  # short, e.g. R-0042, for writing on the paper invoice
+    created_utc: str
+    audit_id: str
+    image_sha256: str
+    status: Literal["suggested", "ambiguous", "unresolvable"]
+    reason: str
+    failed_checks: list[str]
+    candidates: list[Candidate]
+    involved: list[Reading]
+    checks: list[CheckOutcome] | None  # None: queued before check outcomes were stored
 
 
 class CallMetadata(BaseModel):

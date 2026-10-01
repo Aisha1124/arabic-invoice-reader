@@ -80,18 +80,23 @@ arabic-invoice-reader/
 │   ├── extract.py       # model call + response parsing
 │   ├── validate.py      # business rules, confidence gating
 │   ├── store.py         # database + audit log
-│   └── cache.py         # SHA-256 response cache
+│   ├── cache.py         # SHA-256 response cache
+│   ├── resolve.py       # arithmetic resolver: localise, suggest, rank (no model call)
+│   └── review.py        # review queue: a person accepts or rejects each suggestion
 ├── static/
 │   └── index.html       # upload page
 ├── eval/
 │   ├── samples/               # 30 PNG invoices (gitignored)
 │   ├── ground_truth.json      # exact field values
+│   ├── golden_set.csv         # numeric values verified by hand from the images
+│   ├── runs/                  # timestamped golden-set run records (committed)
 │   ├── README.md              # dataset documentation
 │   ├── generate_invoices.py   # regenerates the set
 │   ├── results.md             # full evaluation output and analysis
 │   ├── fonts/                 # Arabic fonts for the generator
 │   ├── load_data.py           # reads and validates the set
-│   └── run_eval.py            # accuracy measurement
+│   ├── run_eval.py            # accuracy measurement
+│   └── coru/                  # CORU numeral-reading evidence: scores only, no images or text
 ├── tests/
 │   ├── __init__.py      # makes the repo root importable under pytest
 │   ├── fixtures/        # recorded model responses
@@ -99,6 +104,9 @@ arabic-invoice-reader/
 │   ├── test_validate.py
 │   ├── test_extract.py
 │   ├── test_cache.py
+│   ├── test_resolve.py
+│   ├── test_review.py
+│   ├── test_main.py     # HTTP endpoints, via FastAPI's TestClient (httpx)
 │   ├── test_store.py
 │   ├── test_load_data.py
 │   └── test_run_eval.py
@@ -206,6 +214,8 @@ Every extraction writes one immutable row. Append-only. No updates, no deletes.
 | `latency_ms` | duration |
 | `estimated_cost_usd` | spend |
 
+**Resolver log.** `store.py` also holds `resolver_events`, append-only like the audit log: one row per resolver outcome (`suggested`, `ambiguous`, `unresolvable`) and per review decision (`accepted`, `rejected`, `checked_manually`), with the audit row id, the review reference (`R-0042`), failed check names, the top or accepted field path, its confusion type and rank, and the candidate count. Never amounts. The amounts a reviewer needs live in `review.py`'s `review_queue`, which is the only table rows are ever removed from (see section 9).
+
 **Never write invoice content, names, VAT numbers, or images into the audit log.** The log records that an extraction happened and how it went, not what was in it. This is the PDPL-safe design and it is the point.
 
 `Finding.message` is excluded from `validation_findings` because it quotes content: the seller-VAT format rule prints the received number, the arithmetic rules print the amounts. `rule`, `severity` and `fields` name positions in the schema, not values, so they are safe to keep.
@@ -215,6 +225,7 @@ Every extraction writes one immutable row. Append-only. No updates, no deletes.
 ## 9. Privacy rules
 
 - Uploaded images are processed in memory and discarded. Never written to disk outside `.cache/` (hash-keyed, gitignored).
+- `review_queue` (in `data/app.db`) stores amounts and field paths for a pending review: the values read in the failed checks and the candidate values, plus a short reference (`R-0042`) the user writes on the paper invoice, and the outcome of each arithmetic check (`{rule, line, outcome, reason}`: positions and pass/fail/not-checked, no amounts) for the check map. Never names, VAT numbers, descriptions or images. `GET /reviews` returns these amounts and the app has no authentication: anyone who can reach the server can read the queue. The row is removed in the same transaction that logs the decision, so amounts leave the database once a person has decided. Undecided rows stay until then.
 - `.cache/` and `data/` are in `.gitignore`. No sample invoice with real data ever enters git.
 - Use only the PII-redacted variants of public datasets.
 - `docs/data-flow.md` states plainly: what is sent to OpenAI, what is stored, what is not stored, where it is hosted, and how deletion works. Write what the code actually does. If the code does not implement deletion, the document says so.
@@ -274,4 +285,11 @@ Never: silently simplify the task, fake a result, stub something and describe it
 - Currency-token and whitespace stripping applies to `MONEY_FIELDS`, not all of `NUMERIC_FIELDS`. The instruction said the latter; taken literally it would have turned `2026-01-31 19:10:00` into an unparseable timestamp and mangled invoice numbers containing spaces. Recorded as a case where the literal instruction would have introduced a bug and the narrower reading was right.
 - `validation_findings` in the audit log stores `{rule, severity, fields}` only. Section 8 originally said "JSON array of findings", which taken literally includes `Finding.message` — and messages quote VAT numbers and amounts, violating section 9. Second case, after `MONEY_FIELDS`, where the literal spec was wrong and the narrower reading was right.
 - The Postgres branch in `app/store.py` (`DATABASE_URL` set) is written but has never been executed: `psycopg` is deliberately not a dependency, and the branch raises a clear error naming it. SQLite is the supported store. Do not claim Postgres support in the README.
+- The resolver assumes one misread cell. Two or more misreads usually match no single cell's checks and come back `unresolvable`; it does not try pairs. Candidates are non-negative, amounts at 2 decimals, quantities at up to 3.
+- The resolver's confusion table (`app/resolve.py`) comes from gpt-4o on 29 CORU receipt lines, one model, two prompt versions. It orders candidates; it is not an error rate and has not been measured on this project's invoices or any other model.
+- Accepting a suggestion records the decision; nothing applies the value to an invoice.
+- On real gpt-4o output the one-misread assumption rarely holds for Arabic-Indic invoices. Run on the cached answers for the 6 Arabic-Indic eval samples (2026-09-30): 5 failed arithmetic, and all 5 came back `unresolvable`, with 4 to 11 misread cells each. The resolver said so instead of guessing, and the reviewer gets the values involved, but it suggested nothing. Its suggestions are proven only on single injected misreads (`tests/test_resolve.py`).
+- `/extract` runs the resolver after the audit row is written, only when a finding is an arithmetic rule. A resolver or queue failure is logged by exception type and does not fail the extraction. Re-uploading an image that already has a pending review queues nothing new. The response's `review` field says which happened: `null` (nothing to resolve), `queued` with the reference and resolver status (the existing item's on a re-upload), or `error`.
+- The review queue's `checks` column was added after the queue existed. `app/review.py` adds it with `ALTER TABLE` when missing; rows queued before then have `checks = null` and their card says the check map was not recorded.
+- The review counter uses SQLite `AUTOINCREMENT` and `INSERT … RETURNING`; like the rest of the Postgres branch, it has not been run against Postgres and its syntax would need changing there.
 - Append-only is enforced in application code, not at the database level. `app/store.py` contains no UPDATE or DELETE and a test scans the source for them; nothing stops a user with the SQLite file from deleting rows. A `BEFORE DELETE` trigger was deliberately not added because defining it would put `DELETE` in the module.

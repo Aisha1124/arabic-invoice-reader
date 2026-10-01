@@ -1,6 +1,7 @@
 """
-HTTP surface only. Extraction, validation, caching and the audit log live in the
-other modules; nothing here inspects invoice content.
+HTTP surface only. Extraction, validation, caching, the audit log, the resolver
+and the review queue live in the other modules; nothing here inspects invoice
+content beyond the names of failed validation rules.
 
 Images are uploaded as the raw request body (Content-Type image/png or
 image/jpeg), not multipart. Starlette's multipart parser spools large parts to
@@ -18,9 +19,12 @@ from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 from openai import APIError
+from pydantic import BaseModel
 
+from app import review
 from app.extract import ParseError, extract, model_name
-from app.schema import ExtractionResult
+from app.resolve import ARITHMETIC_RULES, resolve
+from app.schema import ExtractionResult, ExtractResponse, ReviewItem, ReviewOutcome
 from app.store import audit_row, read_last, write_audit
 
 logger = logging.getLogger(__name__)
@@ -28,6 +32,9 @@ logger = logging.getLogger(__name__)
 MAX_UPLOAD_BYTES = 10 * 1024 * 1024
 ACCEPTED_TYPES = {"image/png", "image/jpeg", "image/jpg"}
 AUDIT_PAGE = 50
+# Arithmetic failures the resolver can work on; a missing line-item table comes
+# back unresolvable, which a person still needs to see.
+RESOLVER_RULES = ARITHMETIC_RULES | {"totals_present_without_line_items"}
 
 STATIC_DIR = Path(__file__).resolve().parent.parent / "static"
 
@@ -80,8 +87,8 @@ def _too_large(size: int) -> str:
     )
 
 
-@app.post("/extract", response_model=ExtractionResult)
-async def post_extract(request: Request) -> ExtractionResult:
+@app.post("/extract", response_model=ExtractResponse)
+async def post_extract(request: Request) -> ExtractResponse:
     image = await _read_image(request)
     try:
         result, metadata = extract(image)
@@ -101,13 +108,60 @@ async def post_extract(request: Request) -> ExtractionResult:
     except APIError as exc:
         logger.error("model call failed: %s", exc)
         raise HTTPException(500, "the model call failed") from exc
-    write_audit(audit_row(hashlib.sha256(image).hexdigest(), result, metadata))
-    return result
+    image_sha256 = hashlib.sha256(image).hexdigest()
+    row = audit_row(image_sha256, result, metadata)
+    write_audit(row)
+    queued = None
+    if any(f.rule in RESOLVER_RULES for f in result.findings):
+        queued = _queue_for_review(row.id, image_sha256, result)
+    return ExtractResponse(**dict(result), review=queued)
+
+
+def _queue_for_review(
+    audit_id: str, image_sha256: str, result: ExtractionResult
+) -> ReviewOutcome:
+    """A resolver or queue failure must not cost the user a successful extraction:
+    the invoice is already needs_review, and the response says the review was not
+    queued. Only the exception type is logged, since a message could quote an amount."""
+    try:
+        item = review.submit(
+            audit_id, image_sha256, resolve(result.invoice), result.checks
+        )
+    except Exception as exc:  # noqa: BLE001 - deliberate: the extraction stands regardless
+        logger.error(
+            "resolver failed for image %s: %s", image_sha256[:12], type(exc).__name__
+        )
+        return ReviewOutcome(status="error")
+    return ReviewOutcome(
+        status="queued", reference=item.reference, resolver_status=item.status
+    )
 
 
 @app.get("/audit")
 def get_audit() -> list[dict[str, object]]:
     return [asdict(row) for row in read_last(AUDIT_PAGE)]
+
+
+@app.get("/reviews", response_model=list[ReviewItem])
+def get_reviews() -> list[ReviewItem]:
+    return review.pending()
+
+
+class DecisionBody(BaseModel):
+    decision: review.Decision
+    rank: int | None = None
+
+
+@app.post("/reviews/{queue_id}/decision")
+def post_decision(queue_id: str, body: DecisionBody) -> dict[str, str]:
+    """Records the decision only; no invoice value is changed."""
+    try:
+        item = review.decide(queue_id, body.decision, body.rank)
+    except KeyError as exc:
+        raise HTTPException(404, exc.args[0]) from exc
+    except ValueError as exc:
+        raise HTTPException(400, str(exc)) from exc
+    return {"reference": item.reference, "decision": body.decision}
 
 
 @app.get("/health")

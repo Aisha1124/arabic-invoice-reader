@@ -2,7 +2,7 @@
 
 What this service does with an uploaded invoice, written from the code as it is
 at the time of writing (`app/main.py`, `app/extract.py`, `app/cache.py`,
-`app/store.py`). Where the code does not do something, this document says so.
+`app/store.py`, `app/resolve.py`, `app/review.py`). Where the code does not do something, this document says so.
 It does not claim PDPL compliance; it describes design choices and the PDPL
 concern each one addresses.
 
@@ -38,6 +38,9 @@ On a cache hit no request is made and nothing leaves the machine.
 |---|---|---|---|
 | `.cache/<sha256>_<model>_<prompt_version>.json` | The model's **raw response text**, plus token counts, latency and whether `temperature=0` was accepted | **Yes** | Indefinite. No TTL, no eviction. |
 | `data/app.db`, table `audit_log` | One row per extraction: UUID, UTC timestamp, image SHA-256, model, prompt version, counts of extracted and flagged fields, validation findings as `{rule, severity, fields}`, latency, estimated cost, cache-hit and temperature flags | No | Indefinite. Append-only: the module contains no UPDATE or DELETE, and a test enforces that. |
+| `data/app.db`, table `review_queue` | One row per invoice whose arithmetic failed, awaiting a person: review reference (`R-0042`), upload time, audit row id, image SHA-256, field paths, **the values read in the failed checks and the candidate values**, failed check names, reason, and the pass/fail/not-checked outcome of each arithmetic check by rule and line number (no amounts) | **Amounts only**: no names, VAT numbers, descriptions or images | Until a person decides it (accepted, rejected or checked manually); the row is removed in the same transaction that logs the decision |
+| `data/app.db`, table `review_counter` | One row per issued reference number, nothing else | No | Indefinite. Keeps reference numbers from being reused |
+| `data/app.db`, table `resolver_events` | One row per resolver outcome and per review decision: audit row id, review reference, event, failed check names, field path, confusion type, rank, candidate count | No | Indefinite. Append-only, like `audit_log` |
 | Process memory | The uploaded image, the parsed result | Yes | Until the response is sent |
 | Server log (stderr) | Model name, token counts, latency, cache hits; on a parse failure, the exception message, which can quote fragments of the model's output | Can, on parse failure only | Wherever the operator sends stderr |
 
@@ -47,6 +50,10 @@ It is keyed by image hash so the same invoice is never paid for twice, and it is
 what the evaluation reads from. Anyone reading this document must not conclude
 the system is content-free: it is content-free everywhere *except* `.cache/`,
 and `.cache/` is a plain directory of JSON files with default file permissions.
+The one other place amounts are stored is `review_queue`, and only while a
+review is waiting for a person. They are also served, unauthenticated, by
+`GET /reviews`: the application has no login, so anyone who can reach the
+server can read the pending amounts. Run it only where that is acceptable.
 
 Both `.cache/` and `data/` are git-ignored. The evaluation set in `eval/` is
 synthetic (no real company, person or VAT number) and is the only invoice data
@@ -88,18 +95,25 @@ not of this code.
 
 ## 6. Deletion
 
-**No deletion endpoint exists.** The service has no API, page or command that
-removes anything. Deletion is done by hand on the host:
+**No deletion endpoint exists.** The service has no API, page or command for
+removing stored data. The only removal the code performs is automatic: a
+`review_queue` row goes when a review decision is recorded. Everything else is
+deleted by hand on the host:
 
 - `rm -r .cache/` removes every stored model response. To remove one invoice's
   response, compute the image's SHA-256 and delete the file whose name begins
   with it.
-- `rm data/app.db` removes the entire audit log. Individual rows cannot be
+- A review decision removes its `review_queue` row, and with it the amounts;
+  this is the only deletion the application performs. Undecided rows stay until
+  someone decides them; there is no expiry.
+- `rm data/app.db` removes the entire audit log, the resolver log and any
+  undecided review rows. Individual rows cannot be
   deleted through the application by design; deleting them with `sqlite3`
   directly is possible and nothing prevents it.
 
-Because the audit log holds no content and the image hash is one-way, deleting
-`.cache/` alone removes all stored invoice content from the machine. What
+Because the audit and resolver logs hold no content and the image hash is
+one-way, deleting `.cache/` and any undecided `review_queue` rows removes all
+stored invoice content from the machine. What
 OpenAI holds is outside the operator's filesystem and outside this document.
 
 ## 7. PDPL concerns and what addresses them
