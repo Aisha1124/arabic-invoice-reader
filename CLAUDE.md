@@ -54,7 +54,7 @@ Fixed. Do not substitute.
 | Storage | SQLite locally (`data/app.db`); Postgres via `DATABASE_URL` if set |
 | Tests | pytest |
 | Formatting | ruff (format + lint) |
-| Frontend | One plain HTML page. No React, no framework, no build step. |
+| Frontend | One plain HTML page. No React, no framework, no build step. Fonts are vendored in `static/fonts/`; no font CDN or other third-party request. |
 
 **Model name:** never hardcode it. Read `OPENAI_MODEL` from environment. If unset, fail with a clear message telling the user to set it. Do not assume which vision models exist — the user sets this.
 
@@ -84,7 +84,8 @@ arabic-invoice-reader/
 │   ├── resolve.py       # arithmetic resolver: localise, suggest, rank (no model call)
 │   └── review.py        # review queue: a person accepts or rejects each suggestion
 ├── static/
-│   └── index.html       # upload page
+│   ├── index.html       # upload page
+│   └── fonts/           # IBM Plex Sans Arabic woff2 (400, 500, 600) + LICENSE.txt (OFL 1.1), from @ibm/plex-sans-arabic 1.1.0
 ├── eval/
 │   ├── samples/               # 30 PNG invoices (gitignored)
 │   ├── ground_truth.json      # exact field values

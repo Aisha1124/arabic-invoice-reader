@@ -328,3 +328,96 @@ def test_strip_is_drawn_inside_the_result_only_and_nothing_waits() -> None:
     main = main[main.index("</script>") :]
     assert "pipelineStages(result)" in main
     assert "checkMap(" in main
+
+
+# --- step 2: verdict bar, run details, local fonts, local preview ----------------
+
+
+def _verdict(body: dict) -> dict:
+    return _run(f"console.log(JSON.stringify(verdict({json.dumps(body)})))")
+
+
+def test_verdict_for_a_consistent_invoice_says_consistent_not_verified() -> None:
+    v = _verdict(_response(_two_lines()))
+
+    assert (v["state"], v["word"], v["reference"]) == ("passed", "OK", None)
+    assert "Every arithmetic check passes" in v["sentence"]
+    assert "not the same as verified" in v["sentence"]
+
+
+def test_verdict_for_a_queued_misread_counts_failed_checks_and_gives_the_reference() -> (
+    None
+):
+    v = _verdict(_response(MISREAD, _queued("suggested")))
+
+    assert (v["state"], v["word"], v["reference"]) == (
+        "failed",
+        "Needs review",
+        "R-0007",
+    )
+    assert v["sentence"].startswith("1 arithmetic check fails.")
+    assert "Queued for review." in v["sentence"]
+
+
+def test_verdict_for_warnings_only_is_amber_and_says_which_checks_ran() -> None:
+    lumped = _two_lines(
+        line_items=[
+            _line("2", "100.00", "200.00", "0"),
+            _line("1", "50.00", "50.00", "0"),
+        ]
+    )
+    v = _verdict(_response(lumped))
+
+    assert (v["state"], v["word"], v["reference"]) == ("warnings", "Warnings", None)
+    assert "Every arithmetic check that ran passes" in v["sentence"]
+    assert "1 compliance warning" in v["sentence"]
+
+
+def test_verdict_for_a_non_arithmetic_error_says_the_resolver_has_nothing() -> None:
+    v = _verdict(_response(_two_lines(invoice_date="2026-01-16")))
+
+    assert (v["state"], v["reference"]) == ("failed", None)
+    assert v["sentence"].startswith("1 error.")
+    assert "only works on arithmetic" in v["sentence"]
+
+
+def test_verdict_for_a_resolver_error_says_it_was_not_queued() -> None:
+    v = _verdict(_response(MISREAD, ReviewOutcome(status="error")))
+
+    assert v["reference"] is None
+    assert "Not queued: the resolver failed." in v["sentence"]
+
+
+def test_run_details_come_from_the_audit_row_or_say_unavailable() -> None:
+    audit = {"model": "gpt-4o", "latency_ms": 1234, "cache_hit": True}
+    out = _run(
+        f"console.log(JSON.stringify([runDetails({json.dumps(audit)}), runDetails(null),"
+        f" runDetails({json.dumps({**audit, 'cache_hit': False})})]))"
+    )
+
+    assert out == [
+        "gpt-4o · 1.2 s · from cache",
+        "Run details unavailable",
+        "gpt-4o · 1.2 s · live call",
+    ]
+
+
+def test_fonts_are_vendored_and_no_font_cdn_is_called() -> None:
+    assert "fonts.googleapis" not in PAGE and "fonts.gstatic" not in PAGE
+    urls = re.findall(r'url\("(/static/fonts/[^"]+)"\)', PAGE)
+    assert urls
+    for url in urls:
+        assert (ROOT / url.lstrip("/")).is_file(), url
+    assert (ROOT / "static" / "fonts" / "LICENSE.txt").is_file()
+    assert "SIL Open Font License" in (ROOT / "static/fonts/LICENSE.txt").read_text(
+        encoding="utf-8"
+    )
+
+
+def test_preview_is_a_local_object_url_revoked_on_the_next_upload() -> None:
+    """The preview reads the chosen file in the browser; one object URL at a time,
+    and the previous one is revoked before a new one is made."""
+    assert PAGE.count("URL.createObjectURL(") == 1
+    assert "URL.revokeObjectURL(" in PAGE
+    assert PAGE.index("URL.revokeObjectURL(") < PAGE.index("URL.createObjectURL(")
+    assert "not stored" in PAGE

@@ -355,3 +355,9 @@ def test_page_has_the_review_tab(client: TestClient) -> None:
     # Misreads can sit outside the failed checks (eval/results.md, "Resolver on
     # real model output"), so an unresolvable card must not imply the list is complete.
     assert "check every number on the invoice" in page
+
+
+def test_vendored_fonts_are_served(client: TestClient) -> None:
+    response = client.get("/static/fonts/IBMPlexSansArabic-Regular.woff2")
+    assert response.status_code == 200
+    assert response.content[:4] == b"wOF2"

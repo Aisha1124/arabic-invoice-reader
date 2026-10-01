@@ -5,174 +5,190 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Invoice Reader</title>
 <style>
+  /* IBM Plex Sans Arabic, OFL 1.1, vendored in static/fonts/ (LICENSE.txt there). */
+  @font-face { font-family: "IBM Plex Sans Arabic"; font-weight: 400; font-display: swap; src: url("/static/fonts/IBMPlexSansArabic-Regular.woff2") format("woff2"); }
+  @font-face { font-family: "IBM Plex Sans Arabic"; font-weight: 500; font-display: swap; src: url("/static/fonts/IBMPlexSansArabic-Medium.woff2") format("woff2"); }
+  @font-face { font-family: "IBM Plex Sans Arabic"; font-weight: 600; font-display: swap; src: url("/static/fonts/IBMPlexSansArabic-SemiBold.woff2") format("woff2"); }
+
   :root {
-    --accent: #1f5fbf;
-    --ink: #1c1f24;
-    --muted: #5d6470;
-    --line: #d9dde3;
+    --font: "IBM Plex Sans Arabic", system-ui, -apple-system, "Segoe UI", "Noto Sans Arabic", Tahoma, sans-serif;
+    --mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    /* 4px spacing scale */
+    --s1: 4px; --s2: 8px; --s3: 12px; --s4: 16px; --s5: 20px; --s6: 24px; --s8: 32px; --s10: 40px;
+    --radius: 8px;
+    --ink: #17191c;
+    --muted: #535a64;
+    --line: #d8dce1;
     --surface: #ffffff;
-    --surface-alt: #f6f7f9;
-    --ok: #1e7f4f;
-    --ok-bg: #e6f4ec;
-    --warn: #a56a00;
-    --warn-bg: #fff4dc;
-    --err: #b3261e;
-    --err-bg: #fbe9e7;
+    --canvas: #f4f5f7;
+    --focus: #1f5fbf;
+    /* Colour carries meaning only: pass, misread, warning, queued, not needed. */
+    --pass: #17704a;     --pass-bg: #e5f3ea;
+    --fail: #b3261e;     --fail-bg: #fbeae8;
+    --warn: #7a5000;     --warn-bg: #fff3d6;
+    --queued: #1f5fbf;   --queued-bg: #e8effa;
+    --neutral: #535a64;  --neutral-bg: #eceef1;
   }
   * { box-sizing: border-box; }
-  body {
-    margin: 0;
-    color: var(--ink);
-    background: var(--surface-alt);
-    font: 15px/1.5 system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
-  }
-  main { max-width: 1100px; margin: 0 auto; padding: 40px 32px 64px; }
-  header { margin-bottom: 28px; }
-  h1 { font-size: 28px; font-weight: 650; margin: 0 0 6px; letter-spacing: -0.01em; }
-  header p { margin: 0; color: var(--muted); font-size: 16px; }
-  h2 { font-size: 13px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.06em; color: var(--muted); margin: 32px 0 12px; }
-  section.block { background: var(--surface); border: 1px solid var(--line); border-radius: 8px; padding: 20px 24px; }
+  body { margin: 0; color: var(--ink); background: var(--canvas); font: 15px/1.5 var(--font); }
+  main { max-inline-size: 1240px; margin-inline: auto; padding: var(--s8) var(--s6) var(--s10); }
+  code, .mono { font-family: var(--mono); }
+  :focus-visible { outline: 3px solid var(--focus); outline-offset: 2px; border-radius: 4px; }
+  .ic { inline-size: 1.1em; block-size: 1.1em; flex: none; vertical-align: -0.2em; fill: none; stroke: currentColor; stroke-width: 2.2; stroke-linecap: round; stroke-linejoin: round; }
 
-  /* Drop zone */
-  #drop {
-    border: 2px dashed var(--line);
-    border-radius: 10px;
-    background: var(--surface);
-    padding: 36px 24px;
-    text-align: center;
-    cursor: pointer;
-    transition: border-color 120ms, background 120ms;
-  }
-  #drop:hover, #drop.over { border-color: var(--accent); background: #eef3fb; }
-  #drop strong { color: var(--accent); }
-  #drop .hint { color: var(--muted); font-size: 13px; margin-top: 6px; }
-  #drop .chosen { margin-top: 12px; font-size: 14px; color: var(--ink); }
-  #drop .chosen code { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 13px; }
+  header.app { display: flex; flex-wrap: wrap; align-items: baseline; gap: var(--s2) var(--s4); margin-block-end: var(--s4); }
+  h1 { font-size: 22px; font-weight: 600; margin: 0; }
+  header.app p { margin: 0; color: var(--muted); font-size: 14px; }
+  h2 { font-size: 13px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.06em; color: var(--muted); margin: var(--s8) 0 var(--s3); }
+  section.block { background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); padding: var(--s5) var(--s6); }
+
+  button { font: inherit; }
+  .btn { display: inline-flex; align-items: center; gap: var(--s2); font-size: 14px; font-weight: 600; border-radius: 6px; padding: var(--s2) var(--s3); cursor: pointer; border: 1px solid var(--line); background: var(--surface); color: var(--ink); }
+  .btn[aria-pressed="true"] { background: var(--ink); border-color: var(--ink); color: var(--surface); }
+  .btn:disabled { opacity: 0.5; cursor: default; }
+
+  /* Tabs */
+  nav.tabs { display: flex; gap: var(--s1); border-block-end: 1px solid var(--line); margin-block-end: var(--s6); }
+  nav.tabs button { font-weight: 600; color: var(--muted); background: none; border: none; border-block-end: 2px solid transparent; padding: var(--s2) var(--s4); margin-block-end: -1px; cursor: pointer; }
+  nav.tabs button[aria-selected="true"] { color: var(--ink); border-block-end-color: var(--ink); }
+  nav.tabs .count { font-variant-numeric: tabular-nums; color: var(--muted); font-weight: 500; }
+
+  /* Upload */
+  #drop { display: flex; flex-wrap: wrap; align-items: center; gap: var(--s2) var(--s4); border: 2px dashed var(--line); border-radius: var(--radius); background: var(--surface); padding: var(--s4) var(--s5); cursor: pointer; }
+  #drop:hover, #drop.over { border-color: var(--ink); }
+  #drop .hint { color: var(--muted); font-size: 13px; }
+  #drop .chosen { margin-inline-start: auto; font-size: 13px; color: var(--muted); overflow-wrap: anywhere; }
   #file { display: none; }
-
-  /* Loading and error */
-  #busy { display: none; align-items: center; gap: 12px; margin-top: 16px; color: var(--muted); }
+  #busy { display: none; align-items: center; gap: var(--s3); margin-block-start: var(--s4); color: var(--muted); }
   #busy.on { display: flex; }
-  .spinner {
-    width: 18px; height: 18px; border-radius: 50%;
-    border: 2px solid var(--line); border-top-color: var(--accent);
-    animation: spin 0.8s linear infinite;
-  }
+  .spinner { inline-size: 18px; block-size: 18px; border-radius: 50%; border: 2px solid var(--line); border-block-start-color: var(--ink); animation: spin 0.8s linear infinite; }
   @keyframes spin { to { transform: rotate(360deg); } }
-  #error { display: none; margin-top: 16px; border: 1px solid var(--err); border-left-width: 4px; background: var(--err-bg); border-radius: 6px; padding: 14px 16px; }
+  @media (prefers-reduced-motion: reduce) { .spinner { animation: none; } }
+  #error { display: none; margin-block-start: var(--s4); border: 1px solid var(--fail); border-inline-start-width: 4px; background: var(--fail-bg); border-radius: 6px; padding: var(--s3) var(--s4); }
   #error.on { display: block; }
-  #error .code { font-weight: 600; color: var(--err); margin-bottom: 4px; }
-  #error pre { margin: 0; white-space: pre-wrap; word-break: break-word; font: 13px/1.45 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
+  #error .code { display: flex; align-items: center; gap: var(--s2); font-weight: 600; color: var(--fail); margin-block-end: var(--s1); }
+  #error pre { margin: 0; white-space: pre-wrap; word-break: break-word; font: 13px/1.45 var(--mono); }
 
-  /* Summary cards */
-  .cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 12px; }
-  .card { background: var(--surface); border: 1px solid var(--line); border-radius: 8px; padding: 14px 16px; }
-  .card .label { font-size: 12px; text-transform: uppercase; letter-spacing: 0.05em; color: var(--muted); }
-  .card .value { font-size: 22px; font-weight: 600; margin-top: 4px; font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
-  .card.status-ok { background: var(--ok-bg); border-color: var(--ok); }
-  .card.status-ok .value { color: var(--ok); }
-  .card.status-review { background: var(--warn-bg); border-color: var(--warn); }
-  .card.status-review .value { color: var(--warn); }
+  /* Verdict bar */
+  .verdict { display: flex; flex-wrap: wrap; align-items: center; gap: var(--s4) var(--s6); margin-block-start: var(--s5); background: var(--surface); border: 1px solid var(--line); border-inline-start-width: 6px; border-radius: var(--radius); padding: var(--s5) var(--s6); }
+  .verdict.passed { border-inline-start-color: var(--pass); }
+  .verdict.failed { border-inline-start-color: var(--fail); }
+  .verdict.warnings { border-inline-start-color: var(--warn); }
+  .chip { display: inline-flex; align-items: center; gap: var(--s2); border-radius: 999px; padding: var(--s1) var(--s3); font-weight: 600; white-space: nowrap; }
+  .chip.big { font-size: 18px; padding: var(--s2) var(--s4); }
+  .chip.passed { color: var(--pass); background: var(--pass-bg); }
+  .chip.failed { color: var(--fail); background: var(--fail-bg); }
+  .chip.warnings { color: var(--warn); background: var(--warn-bg); }
+  .verdict .sentence { flex: 1 1 280px; margin: 0; font-size: 16px; }
+  .refbox { display: flex; align-items: center; gap: var(--s3); }
+  .refbox .label { font-size: 12px; text-transform: uppercase; letter-spacing: 0.05em; color: var(--muted); }
+  .refbox .ref { font: 600 28px/1.1 var(--mono); letter-spacing: 0.02em; color: var(--queued); }
+  .refbox .copied { font-size: 13px; color: var(--muted); min-inline-size: 5em; }
+
+  /* Pipeline strip; run details sit at its end */
+  .stripline { display: flex; flex-wrap: wrap; align-items: center; gap: var(--s2) var(--s4); margin-block-start: var(--s3); }
+  .pipeline { display: flex; flex-wrap: wrap; gap: var(--s2); list-style: none; margin: 0; padding: 0; }
+  .stage { display: flex; align-items: center; gap: var(--s2); border-radius: 6px; padding: var(--s1) var(--s3); font-size: 14px; }
+  .stage .name { font-weight: 600; }
+  .stage.passed { color: var(--pass); background: var(--pass-bg); }
+  .stage.failed { color: var(--fail); background: var(--fail-bg); }
+  .stage.warnings { color: var(--warn); background: var(--warn-bg); }
+  .stage.queued { color: var(--queued); background: var(--queued-bg); }
+  .stage.not_needed { color: var(--neutral); background: var(--neutral-bg); }
+  .run-details { margin: 0; margin-inline-start: auto; font-size: 13px; color: var(--muted); }
+
+  /* Workspace: image on the start side, results on the end side */
+  .workspace { display: grid; grid-template-columns: minmax(280px, 5fr) 7fr; gap: var(--s6); align-items: start; margin-block-start: var(--s5); }
+  .workspace.no-preview { grid-template-columns: 1fr; }
+  .preview { position: sticky; inset-block-start: var(--s4); background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); }
+  .preview summary { padding: var(--s3) var(--s4); font-weight: 600; cursor: pointer; }
+  .preview .tools { display: flex; flex-wrap: wrap; align-items: center; gap: var(--s2); padding: 0 var(--s4) var(--s3); }
+  .preview .note { font-size: 12px; color: var(--muted); margin-inline-start: auto; }
+  .preview .frame { overflow: auto; max-block-size: calc(100vh - 140px); border-block-start: 1px solid var(--line); background: var(--canvas); }
+  .preview .frame img { display: block; }
+  .preview .frame.fit img { inline-size: 100%; block-size: auto; }
+  .preview .frame.actual img { max-inline-size: none; }
+  #details > h2:first-child { margin-block-start: 0; }
+  @media (max-width: 899px) {
+    main { padding: var(--s5) var(--s4) var(--s8); }
+    .workspace { grid-template-columns: 1fr; }
+    .preview { position: static; }
+    .preview .frame { max-block-size: 70vh; }
+  }
 
   /* Findings */
-  .findings { display: grid; gap: 10px; }
-  .finding { border: 1px solid var(--line); border-left-width: 4px; border-radius: 6px; padding: 12px 14px; background: var(--surface); }
-  .finding.error { border-left-color: var(--err); }
-  .finding.warning { border-left-color: var(--warn); }
-  .finding .head { display: flex; align-items: center; gap: 10px; margin-bottom: 4px; }
-  .finding code { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 13px; }
+  .findings { display: grid; gap: var(--s3); }
+  .finding { border: 1px solid var(--line); border-inline-start-width: 4px; border-radius: 6px; padding: var(--s3) var(--s4); background: var(--surface); }
+  .finding.error { border-inline-start-color: var(--fail); }
+  .finding.warning { border-inline-start-color: var(--warn); }
+  .finding .head { display: flex; align-items: center; gap: var(--s3); margin-block-end: var(--s1); }
+  .finding code { font-size: 13px; }
   .tag { font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em; padding: 2px 7px; border-radius: 4px; }
-  .tag.error { color: var(--err); background: var(--err-bg); }
+  .tag.error { color: var(--fail); background: var(--fail-bg); }
   .tag.warning { color: var(--warn); background: var(--warn-bg); }
   .finding .msg { color: var(--muted); font-size: 14px; }
-  .finding code.rule { display: block; margin-top: 4px; color: var(--muted); font-size: 12px; }
+  .finding code.rule { display: block; margin-block-start: var(--s1); color: var(--muted); font-size: 12px; }
   .none { color: var(--muted); }
 
   /* Tables */
-  table { border-collapse: collapse; width: 100%; }
-  th, td { padding: 10px 12px; text-align: left; vertical-align: top; border-bottom: 1px solid var(--line); }
-  thead th { background: var(--surface-alt); font-size: 12px; text-transform: uppercase; letter-spacing: 0.05em; color: var(--muted); border-bottom: 2px solid var(--line); }
-  tbody tr:last-child td { border-bottom: none; }
-  #lines tbody tr:nth-child(even) { background: var(--surface-alt); }
-  th.key { width: 220px; font-weight: 600; color: var(--muted); font-size: 14px; }
+  table { border-collapse: collapse; inline-size: 100%; }
+  th, td { padding: var(--s2) var(--s3); text-align: start; vertical-align: top; border-block-end: 1px solid var(--line); }
+  thead th { background: var(--canvas); font-size: 12px; text-transform: uppercase; letter-spacing: 0.05em; color: var(--muted); border-block-end: 2px solid var(--line); }
+  tbody tr:last-child td { border-block-end: none; }
+  th.key { inline-size: 200px; font-weight: 600; color: var(--muted); font-size: 14px; }
   td[dir="auto"] { unicode-bidi: plaintext; }
-  td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
-  td.num input { text-align: right; }
-  td.flagged { background: var(--warn-bg); box-shadow: inset 3px 0 0 var(--warn); }
-  td.flagged input {
-    width: 100%; font: inherit; font-variant-numeric: inherit; color: inherit;
-    background: transparent; border: none; border-bottom: 1px solid var(--warn); padding: 0; outline: none;
-  }
-  td.flagged input:focus { border-bottom-color: var(--accent); }
-
-  .footnote { margin-top: 20px; font-size: 13px; color: var(--muted); border-top: 1px solid var(--line); padding-top: 12px; }
-  .footnote span { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
-
-  /* Tabs */
-  nav.tabs { display: flex; gap: 4px; border-bottom: 1px solid var(--line); margin-bottom: 24px; }
-  nav.tabs button {
-    font: inherit; font-weight: 600; color: var(--muted); background: none; border: none;
-    border-bottom: 2px solid transparent; padding: 10px 14px; margin-bottom: -1px; cursor: pointer;
-  }
-  nav.tabs button[aria-selected="true"] { color: var(--accent); border-bottom-color: var(--accent); }
-  nav.tabs .count { font-variant-numeric: tabular-nums; color: var(--muted); font-weight: 500; }
-
-  /* Review reference on the extract result */
-  #review-ref { display: none; margin-top: 16px; border: 1px solid var(--warn); border-left-width: 4px; background: var(--warn-bg); border-radius: 6px; padding: 12px 16px; }
-  #review-ref.on { display: block; }
-  .ref { font: 600 18px/1.2 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; letter-spacing: 0.02em; }
-
-  /* Review queue */
-  .review-note { color: var(--muted); font-size: 14px; margin: 0 0 16px; }
-  .reviews { display: grid; gap: 16px; }
-  .review { background: var(--surface); border: 1px solid var(--line); border-radius: 8px; padding: 18px 20px; }
-  .review .top { display: flex; align-items: baseline; gap: 12px; flex-wrap: wrap; margin-bottom: 10px; }
-  .review .when { color: var(--muted); font-size: 13px; }
-  .tag.suggested { color: var(--accent); background: #eef3fb; }
-  .tag.ambiguous, .tag.unresolvable { color: var(--warn); background: var(--warn-bg); }
-  .banner { border-left: 4px solid var(--warn); background: var(--warn-bg); padding: 8px 12px; border-radius: 4px; margin: 8px 0 12px; font-size: 14px; }
-  .review h3 { font-size: 12px; text-transform: uppercase; letter-spacing: 0.05em; color: var(--muted); margin: 14px 0 6px; font-weight: 600; }
-  .review ul { margin: 0; padding-left: 20px; }
-  .review table td, .review table th { padding: 8px 10px; }
-  .review .top-pick { color: var(--ok); font-weight: 600; font-size: 12px; text-transform: uppercase; letter-spacing: 0.05em; }
-  .review tr.is-top td { background: var(--ok-bg); }
-  .arabic { font-size: 16px; }
-  .actions { display: flex; gap: 8px; margin-top: 14px; }
-  button.act {
-    font: inherit; font-size: 14px; font-weight: 600; border-radius: 6px; padding: 6px 12px; cursor: pointer;
-    border: 1px solid var(--line); background: var(--surface); color: var(--ink);
-  }
-  button.act.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
-  button.act:disabled { opacity: 0.5; cursor: default; }
-  .review .fail { color: var(--err); font-size: 14px; margin-top: 8px; }
-
-  /* Pipeline strip: red is an error finding, amber is compliance warnings only */
-  .pipeline { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; list-style: none; margin: 24px 0 0; padding: 0; }
-  .stage { border: 1px solid var(--line); border-top-width: 4px; border-radius: 6px; padding: 10px 12px; background: var(--surface); }
-  .stage .name { font-size: 12px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em; color: var(--muted); }
-  .stage .what { font-weight: 600; margin-top: 2px; }
-  .stage.passed { border-top-color: var(--ok); } .stage.passed .what { color: var(--ok); }
-  .stage.failed { border-top-color: var(--err); } .stage.failed .what { color: var(--err); }
-  .stage.warnings { border-top-color: var(--warn); } .stage.warnings .what { color: var(--warn); }
-  .stage.queued { border-top-color: var(--accent); } .stage.queued .what { color: var(--accent); }
-  .stage.not_needed { background: var(--surface-alt); } .stage.not_needed .what { color: var(--muted); font-weight: 500; }
-  @media (max-width: 600px) { .pipeline { grid-template-columns: repeat(2, 1fr); } }
+  td.num, th.num { text-align: end; font-variant-numeric: tabular-nums; }
+  td.num input { text-align: end; }
+  td.flagged { background: var(--fail-bg); box-shadow: inset 3px 0 0 var(--fail); }
+  td.flagged input { inline-size: 100%; font: inherit; font-variant-numeric: inherit; color: inherit; background: transparent; border: none; border-block-end: 1px solid var(--fail); padding: 0; }
+  .footnote { margin-block-start: var(--s5); font-size: 13px; color: var(--muted); border-block-start: 1px solid var(--line); padding-block-start: var(--s3); }
+  .footnote span { font-family: var(--mono); }
 
   /* Check map */
   .checkmap { overflow-x: auto; }
   .checkmap th, .checkmap td { text-align: center; white-space: nowrap; }
-  .checkmap th:first-child, .checkmap td:first-child { text-align: left; }
-  .checkmap td.pass { color: var(--ok); background: var(--ok-bg); font-weight: 600; }
-  .checkmap td.fail { color: var(--err); background: var(--err-bg); font-weight: 600; }
-  .checkmap td.not_checked { color: var(--muted); background: var(--surface-alt); cursor: help; }
+  .checkmap th:first-child, .checkmap td:first-child { text-align: start; }
+  .checkmap td.pass { color: var(--pass); background: var(--pass-bg); font-weight: 600; }
+  .checkmap td.fail { color: var(--fail); background: var(--fail-bg); font-weight: 600; }
+  .checkmap td.not_checked { color: var(--neutral); background: var(--neutral-bg); cursor: help; }
   .checkmap td.na { color: var(--line); }
+
+  /* Review queue */
+  .ref { font: 600 18px/1.2 var(--mono); letter-spacing: 0.02em; }
+  .review-note { color: var(--muted); font-size: 14px; margin: 0 0 var(--s4); }
+  .reviews { display: grid; gap: var(--s4); }
+  .review { background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); padding: var(--s4) var(--s5); }
+  .review .top { display: flex; align-items: baseline; gap: var(--s3); flex-wrap: wrap; margin-block-end: var(--s3); }
+  .review .when { color: var(--muted); font-size: 13px; }
+  .tag.suggested { color: var(--queued); background: var(--queued-bg); }
+  .tag.ambiguous, .tag.unresolvable { color: var(--neutral); background: var(--neutral-bg); }
+  .banner { border-inline-start: 4px solid var(--neutral); background: var(--neutral-bg); padding: var(--s2) var(--s3); border-radius: 4px; margin: var(--s2) 0 var(--s3); font-size: 14px; }
+  .review h3 { font-size: 12px; text-transform: uppercase; letter-spacing: 0.05em; color: var(--muted); margin: var(--s4) 0 var(--s2); font-weight: 600; }
+  .review ul { margin: 0; padding-inline-start: var(--s5); }
+  .review .top-pick { color: var(--pass); font-weight: 600; font-size: 12px; text-transform: uppercase; letter-spacing: 0.05em; }
+  .review tr.is-top td { background: var(--pass-bg); }
+  .arabic { font-size: 16px; }
+  .actions { display: flex; gap: var(--s2); margin-block-start: var(--s4); }
+  button.act { font-size: 14px; font-weight: 600; border-radius: 6px; padding: 6px var(--s3); cursor: pointer; border: 1px solid var(--line); background: var(--surface); color: var(--ink); }
+  button.act.primary { background: var(--queued); border-color: var(--queued); color: #fff; }
+  button.act:disabled { opacity: 0.5; cursor: default; }
+  .review .fail { color: var(--fail); font-size: 14px; margin-block-start: var(--s2); }
 </style>
 </head>
 <body>
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <symbol id="i-pass" viewBox="0 0 24 24"><path d="M5 12.5l4.5 4.5L19 7.5"/></symbol>
+  <symbol id="i-fail" viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></symbol>
+  <symbol id="i-warn" viewBox="0 0 24 24"><path d="M12 3.5L2.5 20h19z"/><path d="M12 10v4.5M12 17.5v.01"/></symbol>
+  <symbol id="i-queued" viewBox="0 0 24 24"><path d="M3 13l3-8h12l3 8v6H3z"/><path d="M3 13h5l1.5 2.5h5L16 13h5"/></symbol>
+  <symbol id="i-none" viewBox="0 0 24 24"><circle cx="12" cy="12" r="8.5"/><path d="M8 12h8"/></symbol>
+  <symbol id="i-copy" viewBox="0 0 24 24"><rect x="8" y="8" width="12" height="12" rx="2"/><path d="M16 8V5a1 1 0 0 0-1-1H5a1 1 0 0 0-1 1v10a1 1 0 0 0 1 1h3"/></symbol>
+  <symbol id="i-image" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="2"/><circle cx="9" cy="10" r="1.8"/><path d="M21 16l-5-5-9 9"/></symbol>
+</svg>
 <main>
-  <header>
+  <header class="app">
     <h1>Invoice Reader</h1>
-    <p>Extracts Saudi tax invoices to structured fields, checks them against ZATCA arithmetic and structure rules, and logs each extraction without its content.</p>
+    <p>Reads Saudi tax invoices, checks the arithmetic and ZATCA structure, and logs each extraction without its content.</p>
   </header>
 
   <nav class="tabs" role="tablist">
@@ -182,53 +198,71 @@
 
   <div id="view-extract" role="tabpanel">
   <div id="drop" tabindex="0" role="button" aria-label="Choose an invoice image">
-    <div><strong>Choose an image</strong> or drag it here</div>
+    <svg class="ic" aria-hidden="true"><use href="#i-image"/></svg>
+    <div><strong>Choose an invoice image</strong> or drag it here</div>
     <div class="hint">PNG or JPEG, up to 10 MB</div>
     <div class="chosen" id="chosen"></div>
   </div>
   <input type="file" id="file" accept="image/png,image/jpeg">
-  <div id="busy"><div class="spinner"></div><span id="busy-text"></span></div>
-  <div id="error"><div class="code" id="error-code"></div><pre id="error-body"></pre></div>
-  <div id="review-ref" role="status">
-    Queued for review as <span class="ref" id="review-ref-value"></span>.
-    Write this reference on the paper invoice: the review queue shows no image, only the reference.
-  </div>
+  <div id="busy" role="status"><div class="spinner" aria-hidden="true"></div><span id="busy-text"></span></div>
+  <div id="error" role="alert"><div class="code"><svg class="ic" aria-hidden="true"><use href="#i-fail"/></svg><span id="error-code"></span></div><pre id="error-body"></pre></div>
 
   <div id="result" hidden>
-    <ol class="pipeline" id="pipeline" aria-label="Pipeline"></ol>
-
-    <h2>Summary</h2>
-    <div class="cards">
-      <div class="card" id="card-status"><div class="label">Status</div><div class="value" id="v-status"></div></div>
-      <div class="card"><div class="label">Fields extracted</div><div class="value" id="v-extracted"></div></div>
-      <div class="card"><div class="label">Fields flagged</div><div class="value" id="v-flagged"></div></div>
-      <div class="card"><div class="label">Model</div><div class="value" id="v-model"></div></div>
-      <div class="card"><div class="label">Latency</div><div class="value" id="v-latency"></div></div>
-      <div class="card"><div class="label">Source</div><div class="value" id="v-source"></div></div>
+    <div class="verdict" id="verdict">
+      <span class="chip big" id="verdict-chip"></span>
+      <p class="sentence" id="verdict-sentence"></p>
+      <div class="refbox" id="verdict-ref" hidden>
+        <div>
+          <div class="label">Write on the paper invoice</div>
+          <div class="ref" id="verdict-ref-value"></div>
+        </div>
+        <button class="btn" id="copy-ref" type="button"><svg class="ic" aria-hidden="true"><use href="#i-copy"/></svg>Copy</button>
+        <span class="copied" id="copy-status" role="status"></span>
+      </div>
     </div>
+    <div class="stripline">
+      <ol class="pipeline" id="pipeline" aria-label="Pipeline"></ol>
+      <p class="run-details" id="run-details"></p>
+    </div>
+  </div>
 
-    <h2>Findings</h2>
-    <div class="findings" id="findings"></div>
+  <div class="workspace no-preview" id="workspace">
+    <aside class="preview" id="preview" hidden>
+      <details id="preview-box" open>
+        <summary>Invoice image</summary>
+        <div class="tools">
+          <button class="btn" type="button" id="zoom-fit" aria-pressed="true">Fit width</button>
+          <button class="btn" type="button" id="zoom-actual" aria-pressed="false">Actual size</button>
+          <span class="note">Preview from your device only, not stored</span>
+        </div>
+        <div class="frame fit" id="preview-frame"><img id="preview-img" alt="The chosen invoice image"></div>
+      </details>
+    </aside>
 
-    <h2>Arithmetic checks</h2>
-    <section class="block checkmap" id="checkmap"></section>
+    <div id="details" hidden>
+      <h2>Findings</h2>
+      <div class="findings" id="findings"></div>
 
-    <h2>Invoice fields</h2>
-    <section class="block">
-      <table><tbody id="header"></tbody></table>
-    </section>
+      <h2>Arithmetic checks</h2>
+      <section class="block checkmap" id="checkmap"></section>
 
-    <h2>Line items</h2>
-    <section class="block">
-      <table id="lines">
-        <thead><tr>
-          <th class="num">#</th><th>Description</th><th class="num">Quantity</th><th class="num">Unit price</th>
-          <th class="num">Line total</th><th class="num">VAT rate</th><th class="num">VAT amount</th>
-        </tr></thead>
-        <tbody></tbody>
-      </table>
-      <p class="footnote">Highlighted cells appear in an arithmetic finding and can be edited. On invoices printed with Arabic-Indic numerals <span>٠١٢٣٤٥٦٧٨٩</span> the model reads multi-digit amounts unreliably; the arithmetic findings are the signal to trust, not the absence of a highlight.</p>
-    </section>
+      <h2>Invoice fields</h2>
+      <section class="block">
+        <table><tbody id="header"></tbody></table>
+      </section>
+
+      <h2>Line items</h2>
+      <section class="block">
+        <table id="lines">
+          <thead><tr>
+            <th class="num">#</th><th>Description</th><th class="num">Quantity</th><th class="num">Unit price</th>
+            <th class="num">Line total</th><th class="num">VAT rate</th><th class="num">VAT amount</th>
+          </tr></thead>
+          <tbody></tbody>
+        </table>
+        <p class="footnote">Highlighted cells appear in an arithmetic finding and can be edited. On invoices printed with Arabic-Indic numerals <span>٠١٢٣٤٥٦٧٨٩</span> the model reads multi-digit amounts unreliably; the arithmetic findings are the signal to trust, not the absence of a highlight.</p>
+      </section>
+    </div>
   </div>
   </div>
 
@@ -339,6 +373,40 @@ function pipelineStages(result) {
     .map(([stage, [state, label]]) => ({ stage, state, label }));
 }
 
+// The verdict bar: chip state and word, one sentence from the counts, and the review
+// reference when one was queued. Red is an error finding, amber is warnings only.
+function verdict(result) {
+  const errors = result.findings.filter((f) => f.severity === "error").length;
+  const warnings = result.findings.length - errors;
+  const failedChecks = result.checks.filter((c) => c.outcome === "fail").length;
+  const ran = result.checks.some((c) => c.outcome === "not_checked")
+    ? "Every arithmetic check that ran passes" : "Every arithmetic check passes";
+  const review = result.review;
+  const reference = review && review.status === "queued" ? review.reference : null;
+  if (errors === 0 && warnings === 0) {
+    return { state: "passed", word: "OK", reference,
+      sentence: `${ran} and there are no findings. Consistent is not the same as verified.` };
+  }
+  if (errors === 0) {
+    return { state: "warnings", word: "Warnings", reference,
+      sentence: `${ran}; ${plural(warnings, "compliance warning")} to look at.` };
+  }
+  const others = errors - failedChecks;
+  const counts = [];
+  if (failedChecks) counts.push(`${plural(failedChecks, "arithmetic check")} ${failedChecks === 1 ? "fails" : "fail"}`);
+  if (others) counts.push(plural(others, failedChecks ? "other error" : "error"));
+  const plus = warnings ? `, plus ${plural(warnings, "compliance warning")}` : "";
+  const next = review === null ? "Nothing for the resolver to work on: it only works on arithmetic."
+    : review.status === "error" ? "Not queued: the resolver failed." : "Queued for review.";
+  return { state: "failed", word: "Needs review", reference, sentence: `${counts.join(" and ")}${plus}. ${next}` };
+}
+
+// Model, latency and source, from the audit row written for this extraction.
+function runDetails(audit) {
+  if (!audit) return "Run details unavailable";
+  return `${audit.model} · ${(audit.latency_ms / 1000).toFixed(1)} s · ${audit.cache_hit ? "from cache" : "live call"}`;
+}
+
 // Rows: one per line, then the totals. A cell is null where a check does not apply.
 function checkMap(checks) {
   const lineCount = checks.reduce((n, c) => (c.line === null ? n : Math.max(n, c.line + 1)), 0);
@@ -396,14 +464,23 @@ function showError(code, body) {
   document.getElementById("error").classList.add("on");
 }
 
+// The preview reads the chosen file in this browser only. One object URL at a time:
+// the previous one is revoked before the next is made.
+let previewUrl = null;
+function showPreview(file) {
+  if (previewUrl) URL.revokeObjectURL(previewUrl);
+  previewUrl = URL.createObjectURL(file);
+  document.getElementById("preview-img").src = previewUrl;
+  document.getElementById("preview").hidden = false;
+  document.getElementById("workspace").classList.remove("no-preview");
+}
+
 async function submit(file) {
-  document.getElementById("chosen").innerHTML = "";
-  const chosen = document.createElement("code");
-  chosen.textContent = `${file.name} · ${(file.size / 1024).toFixed(0)} KB`;
-  document.getElementById("chosen").append(chosen);
+  setText("chosen", `${file.name} · ${(file.size / 1024).toFixed(0)} KB`);
   document.getElementById("error").classList.remove("on");
-  document.getElementById("review-ref").classList.remove("on");
   document.getElementById("result").hidden = true;
+  document.getElementById("details").hidden = true;
+  showPreview(file);
   setBusy(true);
   try {
     // Raw-body contract: the file's bytes are the body, its MIME type is the Content-Type.
@@ -442,33 +519,44 @@ async function auditRow(hash) {
   }
 }
 
-function render(result, audit) {
-  const flagged = new Set(result.findings.filter((f) => f.severity === "error").flatMap((f) => f.fields));
-  const allFlagged = new Set(result.findings.flatMap((f) => f.fields));
-  const inv = result.invoice;
+const STATE_ICONS = { passed: "pass", failed: "fail", warnings: "warn", queued: "queued", not_needed: "none" };
+
+function icon(name) {
+  const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+  svg.setAttribute("class", "ic");
+  svg.setAttribute("aria-hidden", "true");
+  const use = document.createElementNS("http://www.w3.org/2000/svg", "use");
+  use.setAttribute("href", `#i-${name}`);
+  svg.append(use);
+  return svg;
+}
+
+function renderVerdict(result, audit) {
+  const v = verdict(result);
+  document.getElementById("verdict").className = `verdict ${v.state}`;
+  const chip = document.getElementById("verdict-chip");
+  chip.className = `chip big ${v.state}`;
+  chip.replaceChildren(icon(STATE_ICONS[v.state]), v.word);
+  setText("verdict-sentence", v.sentence);
+  document.getElementById("verdict-ref").hidden = v.reference === null;
+  setText("verdict-ref-value", v.reference || "");
+  setText("copy-status", "");
 
   const strip = document.getElementById("pipeline");
   strip.replaceChildren();
   for (const s of pipelineStages(result)) {
     const li = el("li", `stage ${s.state}`);
-    li.append(el("div", "name", s.stage), el("div", "what", s.label));
+    li.append(icon(STATE_ICONS[s.state]), el("span", "name", s.stage), el("span", "what", s.label));
     strip.append(li);
   }
-  // A re-upload shows the reference already issued; the server never queues an image twice.
-  if (result.review && result.review.status === "queued") {
-    setText("review-ref-value", result.review.reference);
-    document.getElementById("review-ref").classList.add("on");
-  }
-  document.getElementById("checkmap").replaceChildren(checkMapTable(result.checks));
+  setText("run-details", runDetails(audit));
+}
 
-  const extracted = HEADER_FIELDS.filter(([k]) => inv[k] !== null && inv[k] !== undefined).length + inv.line_items.length * LINE_FIELDS.length;
-  setText("v-status", result.status === "ok" ? "OK" : "Needs review");
-  document.getElementById("card-status").className = "card " + (result.status === "ok" ? "status-ok" : "status-review");
-  setText("v-extracted", extracted);
-  setText("v-flagged", allFlagged.size);
-  setText("v-model", audit ? audit.model : "—");
-  setText("v-latency", audit ? `${(audit.latency_ms / 1000).toFixed(1)} s` : "—");
-  setText("v-source", audit ? (audit.cache_hit ? "Cache" : "Live call") : "—");
+function render(result, audit) {
+  const flagged = new Set(result.findings.filter((f) => f.severity === "error").flatMap((f) => f.fields));
+  const inv = result.invoice;
+  renderVerdict(result, audit);
+  document.getElementById("checkmap").replaceChildren(checkMapTable(result.checks));
 
   const findings = document.getElementById("findings");
   findings.replaceChildren();
@@ -525,7 +613,32 @@ function render(result, audit) {
     lines.append(row);
   });
   document.getElementById("result").hidden = false;
+  document.getElementById("details").hidden = false;
 }
+
+document.getElementById("copy-ref").addEventListener("click", async () => {
+  const reference = document.getElementById("verdict-ref-value").textContent;
+  try {
+    await navigator.clipboard.writeText(reference);
+    setText("copy-status", "Copied");
+  } catch {
+    setText("copy-status", "Copy failed: select the reference and copy it");
+  }
+});
+
+for (const [id, mode] of [["zoom-fit", "fit"], ["zoom-actual", "actual"]]) {
+  document.getElementById(id).addEventListener("click", () => {
+    document.getElementById("preview-frame").className = `frame ${mode}`;
+    document.getElementById("zoom-fit").setAttribute("aria-pressed", String(mode === "fit"));
+    document.getElementById("zoom-actual").setAttribute("aria-pressed", String(mode === "actual"));
+  });
+}
+
+// Image open beside the results on wide screens; collapsed above them on narrow ones.
+const wide = window.matchMedia("(min-width: 900px)");
+const placePreview = () => { document.getElementById("preview-box").open = wide.matches; };
+wide.addEventListener("change", placePreview);
+placePreview();
 
 function setText(id, value) { document.getElementById(id).textContent = value; }
 
