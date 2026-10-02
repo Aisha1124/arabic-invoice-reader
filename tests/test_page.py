@@ -422,6 +422,18 @@ def test_preview_is_a_local_object_url_revoked_on_the_next_upload() -> None:
     assert "not stored" in PAGE
 
 
+def test_preview_opens_at_actual_size_and_enlarges_in_a_dialog() -> None:
+    """At fit width a full invoice is too small to read in the column. The dialog
+    keeps the not-stored note and hands focus back to the image when it closes."""
+    assert 'class="frame actual"' in PAGE
+    assert 'id="zoom-actual" aria-pressed="true"' in PAGE
+    assert 'id="zoom-fit" aria-pressed="false"' in PAGE
+    dialog = PAGE[PAGE.index('<dialog id="image-dialog"') : PAGE.index("</dialog>")]
+    assert "not stored" in dialog
+    assert 'imageDialog.addEventListener("close", () =>' in PAGE
+    assert 'getElementById("enlarge").focus()' in PAGE
+
+
 # --- step 3: issues list and resolver panel -----------------------------------------
 
 # Where "Show in table" lands for each rule: the cell the check is about.

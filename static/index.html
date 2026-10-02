@@ -106,8 +106,18 @@
   .preview .note { font-size: 12px; color: var(--muted); margin-inline-start: auto; }
   .preview .frame { overflow: auto; max-block-size: calc(100vh - 140px); border-block-start: 1px solid var(--line); background: var(--canvas); }
   .preview .frame img { display: block; }
-  .preview .frame.fit img { inline-size: 100%; block-size: auto; }
+  .preview .frame.fit .enlarge, .preview .frame.fit img { inline-size: 100%; block-size: auto; }
+  .preview .frame.actual .enlarge { inline-size: max-content; }
   .preview .frame.actual img { max-inline-size: none; }
+  .enlarge { display: block; padding: 0; border: 0; background: none; cursor: zoom-in; }
+  .enlarge:focus-visible { outline-offset: -3px; }
+  #image-dialog { inline-size: min(96vw, 1600px); max-inline-size: none; max-block-size: 94vh; padding: 0; border: 1px solid var(--line); border-radius: var(--radius); background: var(--surface); color: var(--ink); }
+  #image-dialog::backdrop { background: rgb(23 25 28 / 0.6); }
+  #image-dialog .bar { display: flex; align-items: center; gap: var(--s3); padding: var(--s2) var(--s4); border-block-end: 1px solid var(--line); }
+  #image-dialog .note { font-size: 12px; color: var(--muted); margin-inline-end: auto; }
+  #image-dialog .frame { overflow: auto; max-block-size: calc(94vh - 52px); background: var(--canvas); }
+  /* At least the dialog's width, so it is never smaller than the column view; natural size when wider. */
+  #image-dialog .frame img { display: block; min-inline-size: 100%; }
   #details > h2:first-child { margin-block-start: 0; }
   @media (max-width: 899px) {
     main { padding: var(--s5) var(--s4) var(--s8); }
@@ -250,13 +260,20 @@
       <details id="preview-box" open>
         <summary>Invoice image</summary>
         <div class="tools">
-          <button class="btn" type="button" id="zoom-fit" aria-pressed="true">Fit width</button>
-          <button class="btn" type="button" id="zoom-actual" aria-pressed="false">Actual size</button>
-          <span class="note">Preview from your device only, not stored</span>
+          <button class="btn" type="button" id="zoom-fit" aria-pressed="false">Fit width</button>
+          <button class="btn" type="button" id="zoom-actual" aria-pressed="true">Actual size</button>
+          <span class="note">Preview from your device only, not stored. Click the image to enlarge.</span>
         </div>
-        <div class="frame fit" id="preview-frame"><img id="preview-img" alt="The chosen invoice image"></div>
+        <div class="frame actual" id="preview-frame"><button class="enlarge" type="button" id="enlarge" aria-label="Open the invoice image larger"><img id="preview-img" alt="The chosen invoice image"></button></div>
       </details>
     </aside>
+    <dialog id="image-dialog" aria-label="Invoice image, enlarged">
+      <div class="bar">
+        <span class="note">Preview from your device only, not stored</span>
+        <button class="btn" type="button" id="dialog-close">Close</button>
+      </div>
+      <div class="frame"><img id="dialog-img" alt="The chosen invoice image, enlarged"></div>
+    </dialog>
 
     <div id="details" hidden>
       <h2>Issues</h2>
@@ -573,6 +590,7 @@ function showPreview(file) {
   if (previewUrl) URL.revokeObjectURL(previewUrl);
   previewUrl = URL.createObjectURL(file);
   document.getElementById("preview-img").src = previewUrl;
+  document.getElementById("dialog-img").src = previewUrl;
   document.getElementById("preview").hidden = false;
   document.getElementById("workspace").classList.remove("no-preview");
 }
@@ -806,6 +824,14 @@ for (const [id, mode] of [["zoom-fit", "fit"], ["zoom-actual", "actual"]]) {
     document.getElementById("zoom-actual").setAttribute("aria-pressed", String(mode === "actual"));
   });
 }
+
+// Escape closes a modal dialog natively. Focus goes back to the image either way,
+// since not every browser restores it on close.
+const imageDialog = document.getElementById("image-dialog");
+document.getElementById("enlarge").addEventListener("click", () => imageDialog.showModal());
+document.getElementById("dialog-close").addEventListener("click", () => imageDialog.close());
+imageDialog.addEventListener("click", (e) => { if (e.target === imageDialog) imageDialog.close(); });
+imageDialog.addEventListener("close", () => document.getElementById("enlarge").focus());
 
 // Image open beside the results on wide screens; collapsed above them on narrow ones.
 const wide = window.matchMedia("(min-width: 900px)");
