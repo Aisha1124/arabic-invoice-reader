@@ -172,9 +172,13 @@
   th .formula { display: block; font-size: 12px; font-weight: 400; }
   th.key .chip { margin-inline-start: var(--s2); }
   .chip.not_needed { color: var(--neutral); background: var(--neutral-bg); }
-  td.checks { min-inline-size: 170px; }
-  .check + .check { margin-block-start: var(--s1); }
-  .check .note, td .reason { display: block; font-size: 12px; color: var(--muted); }
+  /* Eight columns beside the image: tighter cells so the table fits a 1366px screen. */
+  #lines th, #lines td { padding-inline: var(--s2); }
+  td.checks { white-space: nowrap; }
+  td.checks .chip { cursor: help; }
+  td.checks .chip + .chip { margin-inline-start: var(--s1); }
+  td .reason { display: block; font-size: 12px; color: var(--muted); }
+  .sr { position: absolute; inline-size: 1px; block-size: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
   #show-fields { margin-block-start: var(--s3); }
   .footnote { margin-block-start: var(--s5); font-size: 13px; color: var(--muted); border-block-start: 1px solid var(--line); padding-block-start: var(--s3); }
   .footnote span { font-family: var(--mono); }
@@ -474,15 +478,18 @@ function checkCell(rule, line) {
   return line === null ? cell : `line_items[${line}].${cell}`;
 }
 
-// One issue per finding, for the extract screen.
-function issuesFromFindings(findings) {
+// One issue per finding, for the extract screen. An arithmetic issue also carries
+// what its check computed, from the response's checks.
+function issuesFromFindings(findings, checks) {
   return findings.map((f) => {
     const line = LINE_CHECKS.has(f.rule) ? lineNumber(f.fields) - 1 : null;
+    const check = checks.find((c) => c.rule === f.rule && c.line === line && c.computed != null);
     return {
       severity: f.severity,
       sentence: plainFinding(f.rule, f.fields),
       rule: f.rule,
       message: f.message,
+      computed: check ? `Computed ${check.computed} · difference ${signed(check.difference)}` : null,
       target: checkCell(f.rule, line) || f.fields.find((x) => x !== "line_items") || null,
     };
   });
@@ -492,13 +499,14 @@ function issuesFromFindings(findings) {
 // were stored have only the resolver's labels.
 function issuesFromChecks(checks, labels) {
   if (checks === null) {
-    return labels.map((label) => ({ severity: "error", sentence: plainCheck(label), rule: label, message: null, target: null }));
+    return labels.map((label) => ({ severity: "error", sentence: plainCheck(label), rule: label, message: null, computed: null, target: null }));
   }
   return checks.filter((c) => c.outcome === "fail").map((c) => ({
     severity: "error",
     sentence: RULE_SENTENCES[c.rule](c.line === null ? null : c.line + 1),
     rule: c.rule,
     message: null,
+    computed: null,
     target: checkCell(c.rule, c.line),
   }));
 }
@@ -558,9 +566,10 @@ const LINE_CHECK_CELLS = {
   line_total_equals_quantity_times_unit_price: ["quantity", "unit_price", "line_total"],
   vat_amount_equals_line_total_times_vat_rate: ["line_total", "vat_rate", "vat_amount"],
 };
+// [short label for the Checks column, the sum it computes]
 const LINE_CHECK_LABELS = {
-  line_total_equals_quantity_times_unit_price: "Qty × price",
-  vat_amount_equals_line_total_times_vat_rate: "Total × rate",
+  line_total_equals_quantity_times_unit_price: ["Qty", "Quantity × unit price"],
+  vat_amount_equals_line_total_times_vat_rate: ["VAT", "Line total × VAT rate"],
 };
 
 // Per line (0-based): its checks, and the cells that sit in a failed one.
@@ -570,12 +579,15 @@ function lineChecks(checks, lineCount) {
     const failed = new Set(own.filter((c) => c.outcome === "fail").flatMap((c) => LINE_CHECK_CELLS[c.rule]));
     return {
       failed: [...failed],
-      checks: own.map((c) => ({
-        label: LINE_CHECK_LABELS[c.rule], outcome: c.outcome, computed: c.computed ?? null,
-        reason: c.reason ?? null, sentence: RULE_SENTENCES[c.rule](i + 1),
-      })),
+      checks: own.map((c) => ({ label: LINE_CHECK_LABELS[c.rule][0], outcome: c.outcome, hover: lineCheckHover(c, i) })),
     };
   });
+}
+
+function lineCheckHover(check, line) {
+  if (check.outcome === "not_checked") return `Not checked: ${check.reason}`;
+  const sum = `${LINE_CHECK_LABELS[check.rule][1]} = ${check.computed}`;
+  return check.outcome === "fail" ? `${RULE_SENTENCES[check.rule](line + 1)}. ${sum}` : `${sum}: passes`;
 }
 
 // The totals block: what was read, what the other cells add up to, and the gap.
@@ -663,6 +675,7 @@ function showPreview(file) {
   previewUrl = URL.createObjectURL(file);
   document.getElementById("preview-img").src = previewUrl;
   document.getElementById("dialog-img").src = previewUrl;
+  setZoom("actual");
   document.getElementById("preview").hidden = false;
   document.getElementById("workspace").classList.remove("no-preview");
 }
@@ -757,7 +770,7 @@ function render(result, audit) {
   renderLines(result.invoice.line_items, result.checks);
   renderFields(result.invoice, result.findings);
   // After the tables, so each "Show in table" link can check its cell exists.
-  document.getElementById("issues").replaceChildren(issuesList(issuesFromFindings(result.findings), "cell-"));
+  document.getElementById("issues").replaceChildren(issuesList(issuesFromFindings(result.findings, result.checks), "cell-"));
   document.getElementById("result").hidden = false;
   document.getElementById("details").hidden = false;
 }
@@ -803,14 +816,10 @@ function renderLines(items, checks) {
     }
     const cell = el("td", "checks");
     for (const c of marks[i].checks) {
-      const check = el("div", "check");
-      check.append(statusChip(OUTCOME_STATE[c.outcome], `${c.label} · ${OUTCOME_TEXT[c.outcome]}`));
-      if (c.outcome === "fail") {
-        check.title = c.sentence;
-        check.append(el("span", "note", `computed ${c.computed}`));
-      }
-      if (c.reason) check.append(el("span", "note", c.reason));
-      cell.append(check);
+      const chip = statusChip(OUTCOME_STATE[c.outcome], c.label);
+      chip.append(el("span", "sr", `: ${OUTCOME_TEXT[c.outcome]}`));
+      chip.title = c.hover;
+      cell.append(chip);
     }
     row.append(cell);
     body.append(row);
@@ -871,6 +880,7 @@ function issuesList(issues, prefix) {
     }
     const more = el("details");
     more.append(el("summary", "", "Details"), el("code", "rule", issue.rule));
+    if (issue.computed) more.append(el("p", "msg", issue.computed));
     if (issue.message) more.append(el("p", "msg", issue.message));
     body.append(more);
     const li = el("li", "issue");
@@ -956,13 +966,13 @@ document.getElementById("copy-ref").addEventListener("click", async () => {
   }
 });
 
-for (const [id, mode] of [["zoom-fit", "fit"], ["zoom-actual", "actual"]]) {
-  document.getElementById(id).addEventListener("click", () => {
-    document.getElementById("preview-frame").className = `frame ${mode}`;
-    document.getElementById("zoom-fit").setAttribute("aria-pressed", String(mode === "fit"));
-    document.getElementById("zoom-actual").setAttribute("aria-pressed", String(mode === "actual"));
-  });
+function setZoom(mode) {
+  document.getElementById("preview-frame").className = `frame ${mode}`;
+  document.getElementById("zoom-fit").setAttribute("aria-pressed", String(mode === "fit"));
+  document.getElementById("zoom-actual").setAttribute("aria-pressed", String(mode === "actual"));
 }
+document.getElementById("zoom-fit").addEventListener("click", () => setZoom("fit"));
+document.getElementById("zoom-actual").addEventListener("click", () => setZoom("actual"));
 
 // Escape closes a modal dialog natively. Focus goes back to the image either way,
 // since not every browser restores it on close.

@@ -495,7 +495,7 @@ def test_every_rule_becomes_one_plain_issue_with_a_table_target() -> None:
         for r in RULES
     ]
 
-    issues = _issues(f"issuesFromFindings({json.dumps(findings)})")
+    issues = _issues(f"issuesFromFindings({json.dumps(findings)}, [])")
 
     assert len(issues) == len(RULES)
     for rule, issue in zip(RULES, issues, strict=True):
@@ -511,7 +511,9 @@ def test_issues_from_checks_match_issues_from_findings() -> None:
     body = _response(MISREAD)
     arithmetic = [f for f in body["findings"] if f["rule"] in ARITHMETIC_CHECKS]
 
-    from_findings = _issues(f"issuesFromFindings({json.dumps(arithmetic)})")
+    from_findings = _issues(
+        f"issuesFromFindings({json.dumps(arithmetic)}, {json.dumps(body['checks'])})"
+    )
     from_checks = _issues(f"issuesFromChecks({json.dumps(body['checks'])}, [])")
 
     def key(i: dict) -> tuple:
@@ -532,6 +534,7 @@ def test_legacy_review_items_fall_back_to_their_stored_labels() -> None:
             "sentence": "The line totals do not add up to the subtotal",
             "rule": "sum of line totals = subtotal",
             "message": None,
+            "computed": None,
             "target": None,
         }
     ]
@@ -641,13 +644,14 @@ def test_a_failed_line_check_marks_every_cell_it_reads() -> None:
 
     assert first["failed"] == ["quantity", "unit_price", "line_total"]
     assert [(c["label"], c["outcome"]) for c in first["checks"]] == [
-        ("Qty × price", "fail"),
-        ("Total × rate", "pass"),
+        ("Qty", "fail"),
+        ("VAT", "pass"),
     ]
-    assert first["checks"][0]["computed"] == "200.00"
-    assert first["checks"][0]["sentence"] == (
-        "Line 1: quantity × unit price does not equal the line total"
+    assert first["checks"][0]["hover"] == (
+        "Line 1: quantity × unit price does not equal the line total."
+        " Quantity × unit price = 200.00"
     )
+    assert first["checks"][1]["hover"] == "Line total × VAT rate = 37.5000: passes"
     assert second["failed"] == []
 
 
@@ -663,7 +667,8 @@ def test_a_skipped_line_check_marks_nothing_and_says_why() -> None:
     assert first["failed"] == []
     vat = first["checks"][1]
     assert vat["outcome"] == "not_checked"
-    assert vat["reason"]
+    reason = next(c["reason"] for c in _response(lumped)["checks"] if c["reason"])
+    assert vat["hover"] == f"Not checked: {reason}"
 
 
 def test_totals_show_read_computed_and_signed_difference() -> None:
@@ -717,3 +722,27 @@ def test_extract_page_has_no_check_grid_or_editable_values() -> None:
     assert '<table id="totals">' in extract
     assert ">Show all fields<" in extract
     assert 'createElement("input")' not in PAGE
+
+
+def test_arithmetic_issues_carry_the_computed_value_for_details() -> None:
+    body = _response(MISREAD)
+    issues = _issues(
+        f"issuesFromFindings({json.dumps(body['findings'])}, {json.dumps(body['checks'])})"
+    )
+
+    assert [i["computed"] for i in issues] == ["Computed 200.00 · difference +50.00"]
+
+
+def test_non_arithmetic_issues_have_no_computed_value() -> None:
+    body = _response(_two_lines(seller_vat_number=None))
+    issues = _issues(
+        f"issuesFromFindings({json.dumps(body['findings'])}, {json.dumps(body['checks'])})"
+    )
+
+    assert [i["computed"] for i in issues] == [None]
+
+
+def test_a_fresh_upload_resets_the_preview_to_actual_size() -> None:
+    show = PAGE[PAGE.index("function showPreview(") :]
+    show = show[: show.index("\n}\n")]
+    assert 'setZoom("actual")' in show
