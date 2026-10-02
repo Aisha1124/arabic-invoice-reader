@@ -99,7 +99,7 @@
 
   /* Workspace: image on the start side, results on the end side */
   .workspace { display: grid; grid-template-columns: minmax(0, 43fr) minmax(0, 57fr); gap: var(--s6); align-items: start; margin-block-start: var(--s5); }
-  .workspace.no-preview { grid-template-columns: 1fr; }
+  .workspace.no-preview { grid-template-columns: minmax(0, 1fr); }
   .preview { position: sticky; inset-block-start: var(--s4); background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); }
   .preview summary { padding: var(--s3) var(--s4); font-weight: 600; cursor: pointer; }
   .preview .tools { display: flex; flex-wrap: wrap; align-items: center; gap: var(--s2); padding: 0 var(--s4) var(--s3); }
@@ -121,7 +121,7 @@
   #details > h2:first-child { margin-block-start: 0; }
   @media (max-width: 899px) {
     main { padding: var(--s5) var(--s4) var(--s8); }
-    .workspace { grid-template-columns: 1fr; }
+    .workspace { grid-template-columns: minmax(0, 1fr); }
     .preview { position: static; }
     .preview .frame { max-block-size: 70vh; }
   }
@@ -166,9 +166,16 @@
   th.key { inline-size: 200px; font-weight: 600; color: var(--muted); font-size: 14px; }
   td[dir="auto"] { unicode-bidi: plaintext; }
   td.num, th.num { text-align: end; font-variant-numeric: tabular-nums; }
-  td.num input { text-align: end; }
   td.flagged { background: var(--fail-bg); box-shadow: inset 3px 0 0 var(--fail); }
-  td.flagged input { inline-size: 100%; font: inherit; font-variant-numeric: inherit; color: inherit; background: transparent; border: none; border-block-end: 1px solid var(--fail); padding: 0; }
+  td.warned { background: var(--warn-bg); box-shadow: inset 3px 0 0 var(--warn); }
+  .scroll { overflow-x: auto; }
+  th .formula { display: block; font-size: 12px; font-weight: 400; }
+  th.key .chip { margin-inline-start: var(--s2); }
+  .chip.not_needed { color: var(--neutral); background: var(--neutral-bg); }
+  td.checks { min-inline-size: 170px; }
+  .check + .check { margin-block-start: var(--s1); }
+  .check .note, td .reason { display: block; font-size: 12px; color: var(--muted); }
+  #show-fields { margin-block-start: var(--s3); }
   .footnote { margin-block-start: var(--s5); font-size: 13px; color: var(--muted); border-block-start: 1px solid var(--line); padding-block-start: var(--s3); }
   .footnote span { font-family: var(--mono); }
 
@@ -284,24 +291,32 @@
         <div id="resolver-box"></div>
       </section>
 
-      <h2>Arithmetic checks</h2>
-      <section class="block checkmap" id="checkmap"></section>
+      <h2>Totals</h2>
+      <section class="block scroll">
+        <table id="totals">
+          <thead><tr>
+            <th></th><th class="num">Read</th><th class="num">Computed</th><th class="num">Difference</th><th>Status</th>
+          </tr></thead>
+          <tbody></tbody>
+        </table>
+      </section>
+
+      <h2>Line items</h2>
+      <section class="block scroll">
+        <table id="lines">
+          <thead><tr>
+            <th class="num">#</th><th>Description</th><th class="num">Quantity</th><th class="num">Unit price</th>
+            <th class="num">Line total</th><th class="num">VAT rate</th><th class="num">VAT amount</th><th>Checks</th>
+          </tr></thead>
+          <tbody></tbody>
+        </table>
+        <p class="footnote">Red cells sit in a failed arithmetic check. On invoices printed with Arabic-Indic numerals <span>٠١٢٣٤٥٦٧٨٩</span> the model reads multi-digit amounts unreliably; the failed checks are the signal to trust, not the absence of red.</p>
+      </section>
 
       <h2>Invoice fields</h2>
       <section class="block">
         <table><tbody id="header"></tbody></table>
-      </section>
-
-      <h2>Line items</h2>
-      <section class="block">
-        <table id="lines">
-          <thead><tr>
-            <th class="num">#</th><th>Description</th><th class="num">Quantity</th><th class="num">Unit price</th>
-            <th class="num">Line total</th><th class="num">VAT rate</th><th class="num">VAT amount</th>
-          </tr></thead>
-          <tbody></tbody>
-        </table>
-        <p class="footnote">Highlighted cells appear in an arithmetic finding and can be edited. On invoices printed with Arabic-Indic numerals <span>٠١٢٣٤٥٦٧٨٩</span> the model reads multi-digit amounts unreliably; the arithmetic findings are the signal to trust, not the absence of a highlight.</p>
+        <button class="btn" type="button" id="show-fields" aria-controls="header" aria-expanded="false">Show all fields</button>
       </section>
     </div>
   </div>
@@ -538,6 +553,64 @@ function checkMap(checks) {
   return { columns: CHECK_COLUMNS.map(([rule, label]) => ({ rule, label })), rows };
 }
 
+// The cells each per-line check reads: a failed check marks all of them in the table.
+const LINE_CHECK_CELLS = {
+  line_total_equals_quantity_times_unit_price: ["quantity", "unit_price", "line_total"],
+  vat_amount_equals_line_total_times_vat_rate: ["line_total", "vat_rate", "vat_amount"],
+};
+const LINE_CHECK_LABELS = {
+  line_total_equals_quantity_times_unit_price: "Qty × price",
+  vat_amount_equals_line_total_times_vat_rate: "Total × rate",
+};
+
+// Per line (0-based): its checks, and the cells that sit in a failed one.
+function lineChecks(checks, lineCount) {
+  return Array.from({ length: lineCount }, (_, i) => {
+    const own = checks.filter((c) => c.line === i);
+    const failed = new Set(own.filter((c) => c.outcome === "fail").flatMap((c) => LINE_CHECK_CELLS[c.rule]));
+    return {
+      failed: [...failed],
+      checks: own.map((c) => ({
+        label: LINE_CHECK_LABELS[c.rule], outcome: c.outcome, computed: c.computed ?? null,
+        reason: c.reason ?? null, sentence: RULE_SENTENCES[c.rule](i + 1),
+      })),
+    };
+  });
+}
+
+// The totals block: what was read, what the other cells add up to, and the gap.
+const TOTAL_ROWS = [
+  ["subtotal", "Subtotal", "Σ line totals", "subtotal_equals_sum_of_line_totals"],
+  ["vat_total", "VAT total", "Σ line VAT", "vat_total_equals_sum_of_vat_amounts"],
+  ["total", "Total", "Subtotal + VAT total", "total_equals_subtotal_plus_vat_total"],
+];
+
+function totalsRows(invoice, checks) {
+  return TOTAL_ROWS.map(([field, label, formula, rule]) => {
+    const c = checks.find((x) => x.rule === rule && x.line === null);
+    return {
+      field, label, formula, read: invoice[field], outcome: c.outcome, reason: c.reason ?? null,
+      computed: c.computed ?? null, difference: c.difference == null ? null : signed(c.difference),
+    };
+  });
+}
+
+function signed(amount) {
+  const text = String(amount);
+  return text.startsWith("-") || Number(text) === 0 ? text : `+${text}`;
+}
+
+// Invoice fields named in any finding, each with its worst severity.
+function flaggedFields(findings, keys) {
+  const flagged = {};
+  for (const f of findings) {
+    for (const field of f.fields) {
+      if (keys.includes(field) && flagged[field] !== "error") flagged[field] = f.severity;
+    }
+  }
+  return flagged;
+}
+
 function arabicIndic(value) {
   return String(value).replace(/[0-9]/g, (d) => "٠١٢٣٤٥٦٧٨٩"[d]).replace(".", "٫");
 }
@@ -546,8 +619,7 @@ function arabicIndic(value) {
 const HEADER_FIELDS = [
   ["invoice_number", "Invoice number", false], ["invoice_date", "Date", false], ["invoice_timestamp", "Timestamp", false],
   ["invoice_type", "Type", false], ["seller_name", "Seller", false], ["seller_vat_number", "Seller VAT", true],
-  ["buyer_name", "Buyer", false], ["buyer_vat_number", "Buyer VAT", true], ["subtotal", "Subtotal", true],
-  ["vat_total", "VAT total", true], ["total", "Total", true], ["currency", "Currency", false],
+  ["buyer_name", "Buyer", false], ["buyer_vat_number", "Buyer VAT", true], ["currency", "Currency", false],
 ];
 const LINE_FIELDS = [["description", false], ["quantity", true], ["unit_price", true], ["line_total", true], ["vat_rate", true], ["vat_amount", true]];
 
@@ -673,42 +745,108 @@ function renderVerdict(result, audit) {
   setText("run-details", runDetails(audit));
 }
 
+// The result on screen, kept so "Show all fields" can redraw the field table.
+let current = null;
+let showAllFields = false;
+
 function render(result, audit) {
-  const flagged = new Set(result.findings.filter((f) => f.severity === "error").flatMap((f) => f.fields));
-  const inv = result.invoice;
+  current = result;
+  showAllFields = false;
   renderVerdict(result, audit);
-  document.getElementById("checkmap").replaceChildren(checkMapTable(result.checks));
-
-  const header = document.getElementById("header");
-  header.replaceChildren();
-  for (const [key, label, numeric] of HEADER_FIELDS) {
-    const row = document.createElement("tr");
-    const th = document.createElement("th");
-    th.className = "key";
-    th.textContent = label;
-    row.append(th, valueCell(inv[key], flagged.has(key), numeric, `cell-${key}`));
-    header.append(row);
-  }
-
-  const lines = document.querySelector("#lines tbody");
-  lines.replaceChildren();
-  inv.line_items.forEach((line, i) => {
-    const row = document.createElement("tr");
-    const index = document.createElement("td");
-    index.className = "num";
-    index.textContent = i + 1;
-    row.append(index);
-    for (const [key, numeric] of LINE_FIELDS) {
-      const path = `line_items[${i}].${key}`;
-      row.append(valueCell(line[key], flagged.has(path), numeric, `cell-${path}`));
-    }
-    lines.append(row);
-  });
+  renderTotals(result.invoice, result.checks);
+  renderLines(result.invoice.line_items, result.checks);
+  renderFields(result.invoice, result.findings);
   // After the tables, so each "Show in table" link can check its cell exists.
   document.getElementById("issues").replaceChildren(issuesList(issuesFromFindings(result.findings), "cell-"));
   document.getElementById("result").hidden = false;
   document.getElementById("details").hidden = false;
 }
+
+const OUTCOME_STATE = { pass: "passed", fail: "failed", not_checked: "not_needed" };
+
+function statusChip(state, text) {
+  const chip = el("span", `chip small ${state}`);
+  chip.append(icon(STATE_ICONS[state]), text);
+  return chip;
+}
+
+function renderTotals(inv, checks) {
+  const body = document.querySelector("#totals tbody");
+  body.replaceChildren();
+  for (const r of totalsRows(inv, checks)) {
+    const th = el("th", "key", r.label);
+    th.append(el("span", "formula", `Computed: ${r.formula}`));
+    const read = valueCell(r.read, r.outcome === "fail" ? "error" : null, true, `cell-${r.field}`);
+    const computed = el("td", "num");
+    computed.append(ltr("", r.computed ?? "—"));
+    const difference = el("td", "num");
+    difference.append(ltr("", r.difference ?? "—"));
+    const status = el("td");
+    status.append(statusChip(OUTCOME_STATE[r.outcome], OUTCOME_TEXT[r.outcome]));
+    if (r.reason) status.append(el("span", "reason", r.reason));
+    const row = el("tr");
+    row.append(th, read, computed, difference, status);
+    body.append(row);
+  }
+}
+
+function renderLines(items, checks) {
+  const body = document.querySelector("#lines tbody");
+  body.replaceChildren();
+  const marks = lineChecks(checks, items.length);
+  items.forEach((line, i) => {
+    const row = el("tr");
+    row.append(el("td", "num", String(i + 1)));
+    for (const [key, numeric] of LINE_FIELDS) {
+      const severity = marks[i].failed.includes(key) ? "error" : null;
+      row.append(valueCell(line[key], severity, numeric, `cell-line_items[${i}].${key}`));
+    }
+    const cell = el("td", "checks");
+    for (const c of marks[i].checks) {
+      const check = el("div", "check");
+      check.append(statusChip(OUTCOME_STATE[c.outcome], `${c.label} · ${OUTCOME_TEXT[c.outcome]}`));
+      if (c.outcome === "fail") {
+        check.title = c.sentence;
+        check.append(el("span", "note", `computed ${c.computed}`));
+      }
+      if (c.reason) check.append(el("span", "note", c.reason));
+      cell.append(check);
+    }
+    row.append(cell);
+    body.append(row);
+  });
+}
+
+// Only fields named in a finding, unless the person asks for all of them.
+function renderFields(inv, findings) {
+  const flagged = flaggedFields(findings, HEADER_FIELDS.map(([key]) => key));
+  const body = document.getElementById("header");
+  body.replaceChildren();
+  const shown = HEADER_FIELDS.filter(([key]) => showAllFields || key in flagged);
+  if (shown.length === 0) {
+    const row = el("tr");
+    row.append(el("td", "none", "No invoice field is in a finding."));
+    body.append(row);
+  }
+  for (const [key, label, numeric] of shown) {
+    const th = el("th", "key", label);
+    if (flagged[key]) {
+      const [state, word] = SEVERITY[flagged[key]];
+      th.append(statusChip(state, word));
+    }
+    const row = el("tr");
+    row.append(th, valueCell(inv[key], flagged[key] ?? null, numeric, `cell-${key}`));
+    body.append(row);
+  }
+  const toggle = document.getElementById("show-fields");
+  toggle.textContent = showAllFields ? "Show flagged fields only" : "Show all fields";
+  toggle.setAttribute("aria-expanded", String(showAllFields));
+}
+
+document.getElementById("show-fields").addEventListener("click", () => {
+  showAllFields = !showAllFields;
+  renderFields(current.invoice, current.findings);
+});
 
 const SEVERITY = { error: ["failed", "Error"], warning: ["warnings", "Warning"] };
 
@@ -727,7 +865,8 @@ function issuesList(issues, prefix) {
     if (cell) {
       const link = el("a", "locate", "Show in table");
       link.href = `#${cell.id}`;
-      link.addEventListener("click", (e) => { e.preventDefault(); locate(cell); });
+      // Looked up on click: "Show all fields" redraws the field table after this.
+      link.addEventListener("click", (e) => { e.preventDefault(); locate(document.getElementById(cell.id)); });
       body.append(link);
     }
     const more = el("details");
@@ -1026,24 +1165,18 @@ async function decide(item, body, cardNode) {
 
 loadReviews();
 
-function valueCell(value, isFlagged, numeric, id) {
-  const td = document.createElement("td");
+const SEVERITY_CELLS = { error: "flagged", warning: "warned" };
+
+// severity: "error", "warning" or null.
+function valueCell(value, severity, numeric, id) {
+  const missing = value === null || value === undefined;
+  const td = el("td", numeric ? "num" : "", missing ? "Not read" : String(value));
+  if (missing) td.classList.add("none");
   td.id = id;
   // dir=auto lets each cell take its direction from its own first strong character,
   // so Arabic renders right-to-left inside a left-to-right table.
   td.dir = "auto";
-  if (numeric) td.className = "num";
-  const text = value === null || value === undefined ? "" : String(value);
-  if (isFlagged) {
-    td.classList.add("flagged");
-    const input = document.createElement("input");
-    input.value = text;
-    input.dir = "auto";
-    input.setAttribute("aria-label", "flagged value, editable");
-    td.append(input);
-  } else {
-    td.textContent = text;
-  }
+  if (severity) td.classList.add(SEVERITY_CELLS[severity]);
   return td;
 }
 </script>

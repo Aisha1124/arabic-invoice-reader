@@ -616,3 +616,104 @@ def test_page_never_calls_a_candidate_correct() -> None:
     assert "Consistent with checks" in PAGE
     assert not re.search(r"\bcorrect(ion|ed)?\b", PAGE, re.IGNORECASE)
     assert "Show in table" in PAGE
+
+
+# --- step 4: totals block, checks per line, flagged fields --------------------------
+
+
+def _js(call: str) -> object:
+    return _run(f"console.log(JSON.stringify({call}))")
+
+
+def _line_checks(body: dict) -> list[dict]:
+    lines = len(body["invoice"]["line_items"])
+    return _js(f"lineChecks({json.dumps(body['checks'])}, {lines})")
+
+
+def _totals(body: dict) -> list[dict]:
+    return _js(
+        f"totalsRows({json.dumps(body['invoice'])}, {json.dumps(body['checks'])})"
+    )
+
+
+def test_a_failed_line_check_marks_every_cell_it_reads() -> None:
+    first, second = _line_checks(_response(MISREAD))
+
+    assert first["failed"] == ["quantity", "unit_price", "line_total"]
+    assert [(c["label"], c["outcome"]) for c in first["checks"]] == [
+        ("Qty × price", "fail"),
+        ("Total × rate", "pass"),
+    ]
+    assert first["checks"][0]["computed"] == "200.00"
+    assert first["checks"][0]["sentence"] == (
+        "Line 1: quantity × unit price does not equal the line total"
+    )
+    assert second["failed"] == []
+
+
+def test_a_skipped_line_check_marks_nothing_and_says_why() -> None:
+    lumped = _two_lines(
+        line_items=[
+            _line("2", "100.00", "200.00", "0"),
+            _line("1", "50.00", "50.00", "0"),
+        ]
+    )
+    first = _line_checks(_response(lumped))[0]
+
+    assert first["failed"] == []
+    vat = first["checks"][1]
+    assert vat["outcome"] == "not_checked"
+    assert vat["reason"]
+
+
+def test_totals_show_read_computed_and_signed_difference() -> None:
+    rows = _totals(_response(_two_lines(total="297.50")))
+
+    assert [(r["label"], r["outcome"]) for r in rows] == [
+        ("Subtotal", "pass"),
+        ("VAT total", "pass"),
+        ("Total", "fail"),
+    ]
+    total = rows[2]
+    assert (total["read"], total["computed"], total["difference"]) == (
+        "297.50",
+        "287.50",
+        "+10.00",
+    )
+    assert rows[0]["difference"] == "0.00"
+    assert _totals(_response(_two_lines(total="277.50")))[2]["difference"] == "-10.00"
+
+
+def test_totals_without_line_items_are_not_checked_with_a_reason() -> None:
+    rows = _totals(_response(_two_lines(line_items=[])))
+
+    assert [r["outcome"] for r in rows] == ["not_checked", "not_checked", "pass"]
+    assert rows[0]["computed"] is None and rows[0]["difference"] is None
+    assert rows[0]["reason"]
+
+
+def test_flagged_fields_keep_the_worst_severity_and_ignore_other_fields() -> None:
+    findings = [
+        {"rule": "a", "severity": "warning", "fields": ["seller_name", "total"]},
+        {"rule": "b", "severity": "error", "fields": ["invoice_date", "seller_name"]},
+        {"rule": "c", "severity": "warning", "fields": ["invoice_date"]},
+    ]
+    keys = ["invoice_date", "seller_name", "buyer_name"]
+
+    assert _js(f"flaggedFields({json.dumps(findings)}, {json.dumps(keys)})") == {
+        "seller_name": "error",
+        "invoice_date": "error",
+    }
+
+
+def test_extract_page_has_no_check_grid_or_editable_values() -> None:
+    extract = PAGE[
+        PAGE.index('<div id="view-extract"') : PAGE.index('<div id="view-review"')
+    ]
+    assert 'id="checkmap"' not in extract
+    assert re.findall(r"<input\b", PAGE) == ["<input"]
+    assert 'type="file"' in PAGE[PAGE.index("<input") :][:60]
+    assert "<th>Checks</th>" in extract
+    assert '<table id="totals">' in extract
+    assert ">Show all fields<" in extract
+    assert 'createElement("input")' not in PAGE
