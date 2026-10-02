@@ -501,9 +501,12 @@ function resolverPanel(review, item) {
 }
 
 // Model, latency and source, from the audit row written for this extraction.
+// On a cache hit the row's latency is the original call's, not the cache read's.
 function runDetails(audit) {
   if (!audit) return "Run details unavailable";
-  return `${audit.model} · ${(audit.latency_ms / 1000).toFixed(1)} s · ${audit.cache_hit ? "from cache" : "live call"}`;
+  const seconds = `${(audit.latency_ms / 1000).toFixed(1)} s`;
+  if (audit.cache_hit) return `${audit.model} · from cache (original call ${seconds})`;
+  return `${audit.model} · ${seconds} · live call`;
 }
 
 // Rows: one per line, then the totals. A cell is null where a check does not apply.

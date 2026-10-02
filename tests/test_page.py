@@ -381,18 +381,24 @@ def test_verdict_for_a_resolver_error_says_it_was_not_queued() -> None:
     assert "Not queued: the resolver failed." in v["sentence"]
 
 
-def test_run_details_come_from_the_audit_row_or_say_unavailable() -> None:
-    audit = {"model": "gpt-4o", "latency_ms": 1234, "cache_hit": True}
-    out = _run(
-        f"console.log(JSON.stringify([runDetails({json.dumps(audit)}), runDetails(null),"
-        f" runDetails({json.dumps({**audit, 'cache_hit': False})})]))"
+def test_run_details_say_unavailable_without_an_audit_row() -> None:
+    assert _run("console.log(JSON.stringify(runDetails(null)))") == (
+        "Run details unavailable"
     )
 
-    assert out == [
-        "gpt-4o · 1.2 s · from cache",
-        "Run details unavailable",
-        "gpt-4o · 1.2 s · live call",
-    ]
+
+def test_cached_run_details_attribute_the_latency_to_the_original_call() -> None:
+    audit = {"model": "gpt-4o", "latency_ms": 7149, "cache_hit": True}
+    out = _run(f"console.log(JSON.stringify(runDetails({json.dumps(audit)})))")
+
+    assert out == "gpt-4o · from cache (original call 7.1 s)"
+
+
+def test_live_run_details_keep_the_plain_latency() -> None:
+    audit = {"model": "gpt-4o", "latency_ms": 7149, "cache_hit": False}
+    out = _run(f"console.log(JSON.stringify(runDetails({json.dumps(audit)})))")
+
+    assert out == "gpt-4o · 7.1 s · live call"
 
 
 def test_fonts_are_vendored_and_no_font_cdn_is_called() -> None:
