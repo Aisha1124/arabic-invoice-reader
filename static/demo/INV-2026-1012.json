@@ -1,0 +1,11 @@
+{
+ "model": "gpt-4o",
+ "prompt_version": "v3",
+ "record": {
+  "content": "{\n  \"invoice\": {\n    \"invoice_number\": \"INV-2026-1002\",\n    \"invoice_date\": \"2023-01-25\",\n    \"invoice_timestamp\": \"2023-01-25T13:55:00\",\n    \"invoice_type\": \"simplified\",\n    \"seller_name\": \"شركة الخليج للمعدات الطبية\",\n    \"seller_vat_number\": \"٣٩٦٢٣٧٤١٤٣٩٩٧٤\",\n    \"buyer_name\": null,\n    \"buyer_vat_number\": null,\n    \"line_items\": [\n      {\n        \"description\": \"عصير طازج\",\n        \"quantity\": \"١١\",\n        \"unit_price\": \"١٧٫٩٩\",\n        \"line_total\": \"١٩٧٫٨٩\",\n        \"vat_rate\": \"0.15\",\n        \"vat_amount\": \"٢٩٫٦٨\"\n      },\n      {\n        \"description\": \"كرسي مكتبي دوار\",\n        \"quantity\": \"١٢\",\n        \"unit_price\": \"٧٣٫٨٤\",\n        \"line_total\": \"٨٧١٫٠٨\",\n        \"vat_rate\": \"0.15\",\n        \"vat_amount\": \"١٣٠٫٥١\"\n      }\n    ],\n    \"subtotal\": \"٨٩٠٫٩٧\",\n    \"vat_total\": \"١٣٣٫١٩\",\n    \"total\": \"١٠٢٤٫١٦\",\n    \"currency\": \"SAR\"\n  },\n  \"confidence\": {\n    \"invoice_number\": 1,\n    \"invoice_date\": 1,\n    \"invoice_timestamp\": 1,\n    \"invoice_type\": 1,\n    \"seller_name\": 1,\n    \"seller_vat_number\": 1,\n    \"buyer_name\": 0,\n    \"buyer_vat_number\": 0,\n    \"line_items[0].description\": 1,\n    \"line_items[0].quantity\": 1,\n    \"line_items[0].unit_price\": 1,\n    \"line_items[0].line_total\": 1,\n    \"line_items[0].vat_rate\": 1,\n    \"line_items[0].vat_amount\": 1,\n    \"line_items[1].description\": 1,\n    \"line_items[1].quantity\": 1,\n    \"line_items[1].unit_price\": 1,\n    \"line_items[1].line_total\": 1,\n    \"line_items[1].vat_rate\": 1,\n    \"line_items[1].vat_amount\": 1,\n    \"subtotal\": 1,\n    \"vat_total\": 1,\n    \"total\": 1,\n    \"currency\": 1\n  }\n}",
+  "prompt_tokens": 1768,
+  "completion_tokens": 567,
+  "latency_ms": 4641,
+  "temperature_zero": true
+ }
+}

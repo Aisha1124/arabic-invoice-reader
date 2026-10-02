@@ -349,6 +349,14 @@ def extract(
     if record is None:
         record = _call_model(client or OpenAI(), model, image_bytes)
         cache.set(image_bytes, model, PROMPT_VERSION, record)
+    return from_record(image_bytes, model, record, cache_hit)
+
+
+def from_record(
+    image_bytes: bytes, model: str, record: dict[str, Any], cache_hit: bool = True
+) -> tuple[ExtractionResult, CallMetadata]:
+    """Everything after the model call: a cached or saved answer (app/demo.py) runs
+    the same path as a fresh one, with no client and no API key."""
     metadata = _metadata(model, record, cache_hit)
     try:
         invoice, confidences = parse_response(record["content"])

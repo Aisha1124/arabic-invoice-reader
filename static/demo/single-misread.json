@@ -1,0 +1,11 @@
+{
+ "model": "gpt-4o",
+ "prompt_version": "v3",
+ "record": {
+  "content": "{\"invoice\": {\"invoice_number\": \"INV-2026-1010\", \"invoice_date\": \"2026-01-13\", \"invoice_timestamp\": \"2026-01-13T15:22:00\", \"invoice_type\": \"simplified\", \"seller_name\": \"مؤسسة النخيل للمقاولات\", \"seller_vat_number\": \"317538346793003\", \"buyer_name\": null, \"buyer_vat_number\": null, \"line_items\": [{\"description\": \"ورق تصوير A4 - علبة\", \"quantity\": \"٢\", \"unit_price\": \"٦٧٫١٠\", \"line_total\": \"٢٠١٫٣٠\", \"vat_rate\": \"0.15\", \"vat_amount\": \"٣٠٫٢٠\"}], \"subtotal\": \"٢٠١٫٣٠\", \"vat_total\": \"٣٠٫٢٠\", \"total\": \"٢٣١٫٥٠\", \"currency\": \"SAR\"}, \"confidence\": {\"invoice_number\": 1, \"invoice_date\": 1, \"invoice_timestamp\": 1, \"invoice_type\": 1, \"seller_name\": 1, \"seller_vat_number\": 1, \"buyer_name\": 0, \"buyer_vat_number\": 0, \"line_items[0].description\": 1, \"line_items[0].quantity\": 1, \"line_items[0].unit_price\": 1, \"line_items[0].line_total\": 1, \"line_items[0].vat_rate\": 1, \"line_items[0].vat_amount\": 1, \"subtotal\": 1, \"vat_total\": 1, \"total\": 1, \"currency\": 1}}",
+  "prompt_tokens": 1768,
+  "completion_tokens": 409,
+  "latency_ms": 6989,
+  "temperature_zero": true
+ }
+}

@@ -83,10 +83,12 @@ arabic-invoice-reader/
 │   ├── store.py         # database + audit log
 │   ├── cache.py         # SHA-256 response cache
 │   ├── qr.py            # ZATCA QR: zxing-cpp decode + TLV tags 1-5 (no model call)
+│   ├── demo.py          # DEMO_MODE: saved samples, per-visitor in-memory database
 │   ├── resolve.py       # arithmetic resolver: localise, suggest, rank (no model call)
 │   └── review.py        # review queue: a person accepts or rejects each suggestion
 ├── static/
 │   ├── index.html       # upload page
+│   ├── demo/            # demo samples: 5 synthetic invoice PNGs + saved gpt-4o answers
 │   └── fonts/           # IBM Plex Sans Arabic woff2 (400, 500, 600) + LICENSE.txt (OFL 1.1), from @ibm/plex-sans-arabic 1.1.0
 ├── eval/
 │   ├── samples/               # 30 PNG invoices (gitignored)
@@ -108,6 +110,7 @@ arabic-invoice-reader/
 │   ├── test_extract.py
 │   ├── test_cache.py
 │   ├── test_qr.py
+│   ├── test_demo.py
 │   ├── test_resolve.py
 │   ├── test_review.py
 │   ├── test_main.py     # HTTP endpoints, via FastAPI's TestClient (httpx)
@@ -309,4 +312,5 @@ Never: silently simplify the task, fake a result, stub something and describe it
 - `/extract` runs the resolver after the audit row is written, only when a finding is an arithmetic rule. A resolver or queue failure is logged by exception type and does not fail the extraction. Re-uploading an image that already has a pending review queues nothing new. The response's `review` field says which happened: `null` (nothing to resolve), `queued` with the reference and resolver status (the existing item's on a re-upload), or `error`.
 - The review queue's `checks` column was added after the queue existed. `app/review.py` adds it with `ALTER TABLE` when missing; rows queued before then have `checks = null` and their review detail lists the failed checks from the resolver's stored labels instead.
 - The review counter uses SQLite `AUTOINCREMENT` and `INSERT … RETURNING`; like the rest of the Postgres branch, it has not been run against Postgres and its syntax would need changing there.
+- Demo mode (`DEMO_MODE=1`) serves saved gpt-4o answers on 5 synthetic invoices from `static/demo/`; nothing reads an API key and uploads get 403. Each visitor's queue and logs live in a private in-memory SQLite database picked by an `X-Demo-Visitor` id the page makes on load (a header, not a cookie, because Spaces run in a cross-site iframe). It is not authentication: anyone who knows an id can read that visitor's demo queue. At most 200 are kept; the least recently used is closed. "Single misread" is INV-2026-1010's answer with one digit changed on purpose, and the page says so.
 - Append-only is enforced in application code, not at the database level. `app/store.py` contains no UPDATE or DELETE and a test scans the source for them; nothing stops a user with the SQLite file from deleting rows. A `BEFORE DELETE` trigger was deliberately not added because defining it would put `DELETE` in the module.

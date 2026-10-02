@@ -23,6 +23,13 @@ of findings where they disagree ("QR code says …"). They are not cached, not
 logged and not queued: the audit row records the rule names of those findings,
 and a review item records rule names and field paths only.
 
+In demo mode (`DEMO_MODE=1`, the Docker image's default) nothing is uploaded and
+nothing is sent to OpenAI: visitors run saved answers on 5 synthetic invoices in
+`static/demo/`, and each visitor's audit rows, review queue and resolver events
+live in a private in-memory SQLite database that is discarded on Reset, on
+eviction (at most 200 visitors are kept) or when the server stops. Nothing is
+written to `data/app.db` or `.cache/`.
+
 ## 2. What is sent to OpenAI
 
 One HTTPS request to the OpenAI Chat Completions API per cache miss, containing:

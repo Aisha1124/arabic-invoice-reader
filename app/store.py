@@ -16,14 +16,21 @@ import sqlite3
 import uuid
 from collections.abc import Iterator
 from contextlib import contextmanager
+from contextvars import ContextVar
 from dataclasses import asdict, dataclass
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
+from app import demo
 from app.schema import CallMetadata, ExtractionResult
 
 DB_PATH = Path("data/app.db")
+# Demo mode: the visitor's private in-memory database for this request (app/main.py
+# sets it). The append-only rules hold there too; it is closed, not cleared.
+VISITOR_DB: ContextVar[sqlite3.Connection | None] = ContextVar(
+    "visitor_db", default=None
+)
 SHA256_HEX = re.compile(r"[0-9a-f]{64}")
 
 CREATE_TABLE = """
@@ -125,7 +132,18 @@ def audit_row(
 
 @contextmanager
 def connection() -> Iterator[tuple[Any, str]]:
-    """Yields (connection, placeholder). Postgres when DATABASE_URL is set, else SQLite."""
+    """Yields (connection, placeholder): the visitor's database in demo mode,
+    Postgres when DATABASE_URL is set, else SQLite."""
+    visitor = VISITOR_DB.get()
+    if visitor is not None:
+        with visitor:
+            yield visitor, "?"
+        return
+    if demo.enabled():
+        raise RuntimeError(
+            "demo mode has no visitor database for this request;"
+            " it must never fall back to the shared database"
+        )
     url = os.environ.get("DATABASE_URL", "").strip()
     if url:
         try:

@@ -151,7 +151,7 @@ or the date: the invoice reaches review only because its arithmetic fails.
 
 ## Tests
 
-386 tests, all passing, all offline (no API calls). They include:
+404 tests, all passing, all offline (no API calls). They include:
 
 - nine invoices with one known confusion injected (٣→٢, ٨٤→٤٨, a dropped
   digit, …), one per kind of cell, each checked for the right cell and the
@@ -213,6 +213,19 @@ Also measured on the synthetic set, and not repeated here: per-field accuracy
 and the finding that the model's confidence scores do not predict its errors
 ([`eval/README.md`](eval/README.md#the-models-confidence-scores-do-not-predict-its-errors)).
 
+## Demo mode
+
+`DEMO_MODE=1` runs the app with no API key: uploads are refused and visitors pick
+one of five synthetic invoices (clean, many misreads, warnings only, QR code
+disagrees, and a single misread made on purpose so the resolver has something to
+suggest). Each runs through the real pipeline from gpt-4o's saved answer, and
+each visitor's review queue is private and in memory. The Docker image runs in
+this mode.
+
+```bash
+DEMO_MODE=1 .venv/bin/uvicorn app.main:app --port 7860
+```
+
 ## How to run it
 
 Python 3.11+.
@@ -221,7 +234,7 @@ Python 3.11+.
 python3 -m venv .venv
 .venv/bin/pip install -r requirements.txt
 cp .env.example .env              # set OPENAI_API_KEY and OPENAI_MODEL
-.venv/bin/python -m pytest        # 386 passed here, with the sample images present
+.venv/bin/python -m pytest        # 404 passed here, with the sample images present
 ```
 
 The app does not read `.env` itself:

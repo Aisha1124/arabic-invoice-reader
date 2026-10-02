@@ -1113,3 +1113,31 @@ def test_every_field_a_queued_finding_names_has_a_plain_name() -> None:
     names = _js(f"{json.dumps(fields)}.map(plainField)")
     for field, name in zip(fields, names, strict=True):
         assert "_" not in name, (field, name)
+
+
+# --- demo mode ------------------------------------------------------------------------
+
+
+def test_demo_banner_says_the_output_is_saved_and_synthetic() -> None:
+    assert (
+        "Demo: saved model output on synthetic invoices. Run it locally with your own"
+        " API key for live extraction."
+    ) in PAGE
+    assert '<p class="demo-banner" id="demo-banner" role="note" hidden>' in PAGE
+
+
+def test_every_queue_and_log_request_carries_the_visitor_id() -> None:
+    """Only api() adds X-Demo-Visitor; a bare fetch of a visitor route would get a
+    400 in demo mode. Bare fetches are left for routes that need no visitor."""
+    bare = re.findall(r"\bfetch\(([^,)]+)", PAGE)
+    assert sorted(bare) == sorted(
+        ["url", "url", '"/health"', '"/demo/samples"', "sample.image"]
+    )
+    for route in (
+        'api("/audit")',
+        'api("/reviews")',
+        "api(url,",
+        "api(`/reviews/",
+        'api("/demo/reset"',
+    ):
+        assert route in PAGE, route

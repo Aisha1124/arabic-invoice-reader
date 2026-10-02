@@ -30,6 +30,8 @@
     --neutral: #535a64;  --neutral-bg: #eceef1;
   }
   * { box-sizing: border-box; }
+  /* Elements given display: flex or grid would otherwise ignore the hidden attribute. */
+  [hidden] { display: none !important; }
   body { margin: 0; color: var(--ink); background: var(--canvas); font: 15px/1.5 var(--font); }
   main { max-inline-size: 1240px; margin-inline: auto; padding: var(--s8) var(--s6) var(--s10); }
   code, .mono { font-family: var(--mono); }
@@ -52,6 +54,13 @@
   nav.tabs button { font-weight: 600; color: var(--muted); background: none; border: none; border-block-end: 2px solid transparent; padding: var(--s2) var(--s4); margin-block-end: -1px; cursor: pointer; }
   nav.tabs button[aria-selected="true"] { color: var(--ink); border-block-end-color: var(--ink); }
   nav.tabs .count { font-variant-numeric: tabular-nums; color: var(--muted); font-weight: 500; }
+
+  /* Demo mode */
+  .demo-banner { margin: 0 0 var(--s4); padding: var(--s3) var(--s4); border: 1px solid var(--queued); border-inline-start-width: 4px; border-radius: 6px; background: var(--queued-bg); font-weight: 500; }
+  .samples { display: flex; flex-wrap: wrap; align-items: center; gap: var(--s2); padding: var(--s4) var(--s5); background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); }
+  .samples .label { font-weight: 600; margin-inline-end: var(--s2); }
+  .samples #demo-reset { margin-inline-start: auto; }
+  .sample-note { margin: var(--s3) 0 0; padding: var(--s2) var(--s3); border-inline-start: 4px solid var(--warn); background: var(--warn-bg); border-radius: 4px; font-weight: 500; }
 
   /* Upload */
   #drop { display: flex; flex-wrap: wrap; align-items: center; gap: var(--s2) var(--s4); border: 2px dashed var(--line); border-radius: var(--radius); background: var(--surface); padding: var(--s4) var(--s5); cursor: pointer; }
@@ -253,6 +262,7 @@
     <h1>Invoice Reader</h1>
     <p>Reads Saudi tax invoices, checks the arithmetic and ZATCA structure, and logs each extraction without its content.</p>
   </header>
+  <p class="demo-banner" id="demo-banner" role="note" hidden>Demo: saved model output on synthetic invoices. Run it locally with your own API key for live extraction.</p>
 
   <nav class="tabs" role="tablist">
     <button id="tab-extract" role="tab" aria-selected="true" aria-controls="view-extract">Extract</button>
@@ -260,6 +270,12 @@
   </nav>
 
   <div id="view-extract" role="tabpanel">
+  <div class="samples" id="samples" hidden>
+    <span class="label">Pick a sample</span>
+    <span id="sample-buttons"></span>
+    <button class="btn" type="button" id="demo-reset">Reset demo</button>
+  </div>
+  <p class="sample-note" id="sample-note" hidden></p>
   <div id="drop" tabindex="0" role="button" aria-label="Choose an invoice image">
     <svg class="ic" aria-hidden="true"><use href="#i-image"/></svg>
     <div><strong>Choose an invoice image</strong> or drag it here</div>
@@ -803,7 +819,9 @@ function showPreview(file) {
   document.getElementById("workspace").classList.remove("no-preview");
 }
 
-async function submit(file) {
+// url: "/extract" for an upload, whose bytes are the body; a demo sample's route
+// takes no body, and `file` is its image fetched for the preview.
+async function submit(file, url = "/extract") {
   setText("chosen", `${file.name} · ${(file.size / 1024).toFixed(0)} KB`);
   document.getElementById("error").classList.remove("on");
   document.getElementById("result").hidden = true;
@@ -812,11 +830,8 @@ async function submit(file) {
   setBusy(true);
   try {
     // Raw-body contract: the file's bytes are the body, its MIME type is the Content-Type.
-    const response = await fetch("/extract", {
-      method: "POST",
-      headers: { "Content-Type": file.type || "application/octet-stream" },
-      body: file,
-    });
+    const upload = { headers: { "Content-Type": file.type || "application/octet-stream" }, body: file };
+    const response = await api(url, { method: "POST", ...(url === "/extract" ? upload : {}) });
     const text = await response.text();
     if (!response.ok) {
       showError(`HTTP ${response.status}`, text);
@@ -841,7 +856,7 @@ async function sha256(file) {
 // audit row written for it. Match by the image's SHA-256, which the browser can compute.
 async function auditRow(hash) {
   try {
-    const rows = await (await fetch("/audit")).json();
+    const rows = await (await api("/audit")).json();
     return rows.find((r) => r.image_sha256 === hash) || null;
   } catch {
     return null;
@@ -1147,7 +1162,7 @@ function el(tag, className, text) {
 
 async function loadReviews() {
   try {
-    const response = await fetch("/reviews");
+    const response = await api("/reviews");
     if (!response.ok) return null;
     const items = await response.json();
     setCount(items.length);
@@ -1310,7 +1325,7 @@ async function decide(action) {
   drawBar(item);
   setText("review-status", `Recording ${item.reference}…`);
   try {
-    const response = await fetch(`/reviews/${encodeURIComponent(item.id)}/decision`, {
+    const response = await api(`/reviews/${encodeURIComponent(item.id)}/decision`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(decisionBody(action, chosenRank)),
@@ -1362,7 +1377,74 @@ document.addEventListener("keydown", (e) => {
   else decide(action);
 });
 
-loadReviews();
+// ---- Demo mode (app/demo.py) ----
+// The visitor id picks this page's private queue and log on the server. A new one
+// per page load, so reloading starts an empty demo.
+let visitor = null;
+
+function api(url, options = {}) {
+  if (visitor === null) return fetch(url, options);
+  return fetch(url, { ...options, headers: { ...options.headers, "X-Demo-Visitor": visitor } });
+}
+
+async function startDemo() {
+  visitor = Array.from(crypto.getRandomValues(new Uint8Array(16)), (b) => b.toString(16).padStart(2, "0")).join("");
+  document.getElementById("demo-banner").hidden = false;
+  document.getElementById("drop").hidden = true;
+  document.getElementById("samples").hidden = false;
+  // The preview is a synthetic sample from the server here, not a file from the device.
+  for (const note of document.querySelectorAll(".preview .note, #image-dialog .note")) {
+    note.textContent = "Synthetic sample invoice from the demo, not an upload.";
+  }
+  const buttons = document.getElementById("sample-buttons");
+  try {
+    for (const sample of await (await fetch("/demo/samples")).json()) {
+      const button = el("button", "btn", sample.label);
+      button.type = "button";
+      button.addEventListener("click", () => runSample(sample));
+      buttons.append(button, " ");
+    }
+  } catch (err) {
+    buttons.append(el("span", "none", `The samples could not be loaded: ${err.message}`));
+  }
+}
+
+async function runSample(sample) {
+  setText("sample-note", sample.note || "");
+  document.getElementById("sample-note").hidden = !sample.note;
+  try {
+    const blob = await (await fetch(sample.image)).blob();
+    await submit(new File([blob], sample.image.split("/").pop(), { type: blob.type }), `/demo/run/${sample.id}`);
+  } catch (err) {
+    showError("Request failed", err.message);
+  }
+}
+
+document.getElementById("demo-reset").addEventListener("click", async () => {
+  try {
+    await api("/demo/reset", { method: "POST" });
+  } catch (err) {
+    showError("Reset failed", err.message);
+    return;
+  }
+  for (const id of ["result", "details", "preview", "sample-note"]) document.getElementById(id).hidden = true;
+  document.getElementById("workspace").classList.add("no-preview");
+  setText("chosen", "");
+  if (document.getElementById("view-review").hidden) await loadReviews();
+  else await renderReviews();
+});
+
+async function start() {
+  try {
+    const health = await (await fetch("/health")).json();
+    if (health.demo_mode) await startDemo();
+  } catch (err) {
+    showError("Could not reach the server", err.message);
+  }
+  loadReviews();
+}
+
+start();
 
 const OUTCOME_TEXT = { pass: "Pass", fail: "Fail", not_checked: "Not checked" };
 
