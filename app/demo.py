@@ -12,9 +12,9 @@ digit changed on purpose (quantity ٣ read as ٢, the confusion the resolver tes
 inject), so the resolver has one misread to suggest values for.
 
 Each visitor gets a private in-memory SQLite database, chosen by an id the page
-makes when it loads and sends in the X-Demo-Visitor header. Not a cookie: a
-Hugging Face Space is shown in an iframe on another site, where browsers often
-block cookies. Reloading the page or pressing Reset starts an empty one, and
+makes when it loads and sends in the X-Demo-Visitor header. Not a cookie, so it
+keeps working when the page is embedded in another site's iframe, where browsers
+often block cookies. Reloading the page or pressing Reset starts an empty one, and
 nothing is written to data/app.db. At most MAX_VISITORS databases are kept; the
 least recently used is closed first, so one still in use by a request could be
 closed only if that many other visitors arrived during the request.

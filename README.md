@@ -151,7 +151,7 @@ or the date: the invoice reaches review only because its arithmetic fails.
 
 ## Tests
 
-404 tests, all passing, all offline (no API calls). They include:
+406 tests, all passing, all offline (no API calls). They include:
 
 - nine invoices with one known confusion injected (٣→٢, ٨٤→٤٨, a dropped
   digit, …), one per kind of cell, each checked for the right cell and the
@@ -220,7 +220,9 @@ one of five synthetic invoices (clean, many misreads, warnings only, QR code
 disagrees, and a single misread made on purpose so the resolver has something to
 suggest). Each runs through the real pipeline from gpt-4o's saved answer, and
 each visitor's review queue is private and in memory. The Docker image runs in
-this mode.
+this mode and listens on the port in `PORT` (7860 if unset); the live demo is
+that image on Render's free tier, built from this repo. The live demo is on a
+free host, so the first load after a quiet period can take about a minute.
 
 ```bash
 DEMO_MODE=1 .venv/bin/uvicorn app.main:app --port 7860
@@ -234,7 +236,7 @@ Python 3.11+.
 python3 -m venv .venv
 .venv/bin/pip install -r requirements.txt
 cp .env.example .env              # set OPENAI_API_KEY and OPENAI_MODEL
-.venv/bin/python -m pytest        # 404 passed here, with the sample images present
+.venv/bin/python -m pytest        # 406 passed here, with the sample images present
 ```
 
 The app does not read `.env` itself:

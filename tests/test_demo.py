@@ -239,3 +239,31 @@ def test_fixture_names_are_the_generators_invented_ones() -> None:
         invoice = _answer(sample.response)["invoice"]
         for key in ("seller_name", "buyer_name"):
             assert invoice[key] is None or invoice[key] in invented, (sample.id, key)
+
+
+# --- the deployment image ----------------------------------------------------------------
+
+DOCKERFILE = (Path(__file__).resolve().parent.parent / "Dockerfile").read_text("utf-8")
+
+
+def test_image_runs_the_demo_on_the_hosts_port_with_7860_as_default() -> None:
+    """Render sets PORT; a host that does not gets 7860."""
+    assert "DEMO_MODE=1" in DOCKERFILE
+    (cmd,) = [line for line in DOCKERFILE.splitlines() if line.startswith("CMD ")]
+    assert json.loads(cmd[len("CMD ") :]) == [
+        "sh",
+        "-c",
+        'exec uvicorn app.main:app --host 0.0.0.0 --port "${PORT:-7860}"',
+    ]
+
+
+def test_image_copies_no_secrets_cache_or_data() -> None:
+    copies = [
+        line.split()[-2] for line in DOCKERFILE.splitlines() if line.startswith("COPY ")
+    ]
+    assert copies == ["requirements.txt", "app", "static"]
+    instructions = "\n".join(
+        line for line in DOCKERFILE.splitlines() if not line.lstrip().startswith("#")
+    )
+    for word in ("API_KEY", "TOKEN", "SECRET", ".env", "OPENAI"):
+        assert word not in instructions, word
