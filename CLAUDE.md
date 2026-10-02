@@ -74,6 +74,7 @@ arabic-invoice-reader/
 ├── requirements.txt       # what the app runs
 ├── requirements-eval.txt  # generator only (arabic-reshaper, python-bidi, qrcode); pillow is in requirements.txt
 ├── ruff.toml          # excludes vendored eval/generate_invoices.py and *.md
+├── Dockerfile         # Hugging Face Space image: DEMO_MODE=1, port 7860, app/ and static/ only
 ├── app/
 │   ├── __init__.py
 │   ├── main.py          # FastAPI app, routes only
