@@ -183,36 +183,55 @@
   .footnote { margin-block-start: var(--s5); font-size: 13px; color: var(--muted); border-block-start: 1px solid var(--line); padding-block-start: var(--s3); }
   .footnote span { font-family: var(--mono); }
 
-  /* Check map */
-  .checkmap { overflow-x: auto; }
-  .checkmap th, .checkmap td { text-align: center; white-space: nowrap; }
-  .checkmap th:first-child, .checkmap td:first-child { text-align: start; }
-  .checkmap td.pass { color: var(--pass); background: var(--pass-bg); font-weight: 600; }
-  .checkmap td.fail { color: var(--fail); background: var(--fail-bg); font-weight: 600; }
-  .checkmap td.not_checked { color: var(--neutral); background: var(--neutral-bg); cursor: help; }
-  .checkmap td.na { color: var(--line); }
-
-  /* Review queue */
-  .ref { font: 600 18px/1.2 var(--mono); letter-spacing: 0.02em; }
-  .review-note { color: var(--muted); font-size: 14px; margin: 0 0 var(--s4); }
-  .reviews { display: grid; gap: var(--s4); }
-  .review { background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); padding: var(--s4) var(--s5); }
-  .review .top { display: flex; align-items: baseline; gap: var(--s3); flex-wrap: wrap; margin-block-end: var(--s3); }
-  .review .when { color: var(--muted); font-size: 13px; }
+  /* Review queue: inbox on the start side, the chosen item on the end side */
+  .review-note { color: var(--muted); font-size: 14px; margin: 0 0 var(--s2); }
+  .review-status { min-block-size: 1.5em; margin: 0 0 var(--s3); font-weight: 500; }
+  .queue { display: grid; grid-template-columns: minmax(220px, 300px) minmax(0, 1fr); gap: var(--s6); align-items: start; }
+  .inbox { position: sticky; inset-block-start: var(--s4); max-block-size: calc(100vh - 2 * var(--s4)); overflow: auto; background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); }
+  .inbox ol { list-style: none; margin: 0; padding: 0; }
+  .inbox li + li { border-block-start: 1px solid var(--line); }
+  .inbox li.none { padding: var(--s4); }
+  .inbox button { display: grid; grid-template-columns: 1fr auto; align-items: center; gap: 2px var(--s2); inline-size: 100%; text-align: start; padding: var(--s3) var(--s4); border: 0; background: none; color: inherit; cursor: pointer; }
+  .inbox button:hover { background: var(--canvas); }
+  .inbox button[aria-current="true"] { background: var(--queued-bg); box-shadow: inset 4px 0 0 var(--queued); }
+  .inbox .sub { grid-column: 1 / -1; font-size: 13px; color: var(--muted); }
   .tag { font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em; padding: 2px 7px; border-radius: 4px; }
   .tag.suggested { color: var(--queued); background: var(--queued-bg); }
   .tag.ambiguous, .tag.unresolvable { color: var(--neutral); background: var(--neutral-bg); }
-  .banner { border-inline-start: 4px solid var(--neutral); background: var(--neutral-bg); padding: var(--s2) var(--s3); border-radius: 4px; margin: var(--s2) 0 var(--s3); font-size: 14px; }
-  .review h3 { font-size: 12px; text-transform: uppercase; letter-spacing: 0.05em; color: var(--muted); margin: var(--s4) 0 var(--s2); font-weight: 600; }
-  .review ul { margin: 0; padding-inline-start: var(--s5); }
-  .review .top-pick { color: var(--pass); font-weight: 600; font-size: 12px; text-transform: uppercase; letter-spacing: 0.05em; }
-  .review tr.is-top td { background: var(--pass-bg); }
-  .arabic { font-size: 16px; }
-  .actions { display: flex; gap: var(--s2); margin-block-start: var(--s4); }
-  button.act { font-size: 14px; font-weight: 600; border-radius: 6px; padding: 6px var(--s3); cursor: pointer; border: 1px solid var(--line); background: var(--surface); color: var(--ink); }
-  button.act.primary { background: var(--queued); border-color: var(--queued); color: #fff; }
-  button.act:disabled { opacity: 0.5; cursor: default; }
-  .review .fail { color: var(--fail); font-size: 14px; margin-block-start: var(--s2); }
+  .detail { background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); padding: var(--s5) var(--s6) 0; }
+  .detail h3.label { font-size: 12px; text-transform: uppercase; letter-spacing: 0.05em; color: var(--muted); margin: var(--s5) 0 var(--s2); font-weight: 600; }
+  .find { margin: 0; font-size: 16px; font-weight: 500; }
+  .find .ref { display: block; font: 600 34px/1.15 var(--mono); letter-spacing: 0.02em; color: var(--queued); }
+  .find:focus { outline: none; }
+  .meta { display: flex; flex-wrap: wrap; align-items: center; gap: var(--s2) var(--s3); margin: var(--s2) 0 var(--s4); color: var(--muted); font-size: 13px; }
+  .back { display: none; margin-block-end: var(--s3); }
+  .choices { display: grid; gap: var(--s2); }
+  .choice { display: grid; grid-template-columns: auto minmax(8em, 1fr) auto auto auto; align-items: center; gap: var(--s2) var(--s4); padding: var(--s3) var(--s4); border: 1px solid var(--line); border-radius: 6px; cursor: pointer; }
+  .choice:has(input:checked) { border-color: var(--queued); background: var(--queued-bg); }
+  .choice input { inline-size: 18px; block-size: 18px; margin: 0; accent-color: var(--queued); }
+  .choice .why { grid-column: 2 / -1; font-size: 13px; color: var(--muted); }
+  .reading { display: grid; grid-template-columns: minmax(8em, 1fr) auto; align-items: center; gap: var(--s4); padding: var(--s3) var(--s4); border: 1px solid var(--line); border-radius: 6px; }
+  .pair { display: grid; justify-items: end; }
+  .pair .cap { font-size: 11px; text-transform: uppercase; letter-spacing: 0.05em; color: var(--muted); }
+  .pair .big { font-size: 24px; font-weight: 600; font-variant-numeric: tabular-nums; line-height: 1.2; }
+  .pair .ar { font-size: 16px; color: var(--muted); }
+  .arrow { color: var(--muted); }
+  .actionbar { position: sticky; inset-block-end: 0; display: flex; flex-wrap: wrap; align-items: center; gap: var(--s2); margin: var(--s6) calc(-1 * var(--s6)) 0; padding: var(--s3) var(--s6); background: var(--surface); border-block-start: 1px solid var(--line); border-radius: 0 0 var(--radius) var(--radius); }
+  .actionbar .hint { flex-basis: 100%; margin: 0; font-size: 13px; color: var(--muted); }
+  .btn.primary { background: var(--queued); border-color: var(--queued); color: #fff; }
+  .btn.danger { color: var(--fail); border-color: var(--fail); }
+  kbd { font: 600 11px/1.4 var(--mono); border: 1px solid currentColor; border-radius: 4px; padding: 0 4px; opacity: 0.8; }
+  @media (max-width: 899px) {
+    .queue { grid-template-columns: minmax(0, 1fr); }
+    .queue:not(.show-detail) .detail, .queue.show-detail .inbox { display: none; }
+    .inbox { position: static; max-block-size: none; }
+    .back { display: inline-flex; }
+    .detail { padding-inline: var(--s4); }
+    .actionbar { margin-inline: calc(-1 * var(--s4)); padding-inline: var(--s4); }
+    .choice { grid-template-columns: auto 1fr; }
+    .choice .pair { justify-items: start; grid-column: 2; }
+    .choice .arrow { display: none; }
+  }
 </style>
 </head>
 <body>
@@ -327,8 +346,21 @@
   </div>
 
   <div id="view-review" role="tabpanel" hidden>
-    <p class="review-note">Each card is an invoice whose numbers did not add up. The image is not stored: find the paper invoice by its reference and check the values against it. Deciding records your decision only; it does not change any extracted value.</p>
-    <div class="reviews" id="reviews"></div>
+    <p class="review-note">Invoices whose numbers did not add up. The image is not stored: find the paper invoice by its reference and check the values against it. A decision is recorded; it does not change any extracted value. Keys: ↑ ↓ move through the list, A accept, M checked manually, R reject.</p>
+    <p class="review-status" id="review-status" role="status"></p>
+    <div class="queue" id="queue">
+      <nav class="inbox" aria-label="Pending reviews"><ol id="inbox"></ol></nav>
+      <section class="detail" id="detail" aria-labelledby="detail-heading" hidden>
+        <button class="btn back" type="button" id="back">← All reviews</button>
+        <div id="detail-body"></div>
+        <div class="actionbar">
+          <button class="btn primary" type="button" id="act-accept" aria-keyshortcuts="A"></button>
+          <button class="btn" type="button" id="act-checked_manually" aria-keyshortcuts="M"><kbd>M</kbd> Checked manually</button>
+          <button class="btn danger" type="button" id="act-reject" aria-keyshortcuts="R"><kbd>R</kbd> Reject all</button>
+          <p class="hint" id="act-hint"></p>
+        </div>
+      </section>
+    </div>
   </div>
 </main>
 
@@ -395,15 +427,6 @@ function plainField(path) {
   if (m) return `Line ${+m[1] + 1} · ${m[2].replace("_", " ").replace("vat", "VAT")}`;
   return FIELD_NAMES[path] || path;
 }
-
-// Check-map columns, in validate.py's ARITHMETIC_CHECKS order.
-const CHECK_COLUMNS = [
-  ["line_total_equals_quantity_times_unit_price", "Qty × price = line total"],
-  ["vat_amount_equals_line_total_times_vat_rate", "Line total × rate = VAT"],
-  ["subtotal_equals_sum_of_line_totals", "Σ line totals = subtotal"],
-  ["vat_total_equals_sum_of_vat_amounts", "Σ line VAT = VAT total"],
-  ["total_equals_subtotal_plus_vat_total", "Subtotal + VAT = total"],
-];
 
 function plural(n, word) { return `${n} ${word}${n === 1 ? "" : "s"}`; }
 
@@ -525,7 +548,8 @@ function resolverPanel(review, item) {
       text: "It has been decided in the review queue. A decision is recorded; it does not change this result." };
   }
   const candidates = item.candidates.map((c) => ({
-    rank: c.rank, field: plainField(c.field), read: c.read_value, value: c.value, arabic: arabicIndic(c.value),
+    rank: c.rank, field: plainField(c.field), read: c.read_value, readArabic: arabicIndic(c.read_value),
+    value: c.value, arabic: arabicIndic(c.value),
     why: EDITS[c.edit] || c.edit, label: "Consistent with checks", first: item.status === "suggested" && c.rank === 1,
   }));
   if (item.status === "suggested") {
@@ -537,7 +561,7 @@ function resolverPanel(review, item) {
       text: "The arithmetic fits more than one reading and nothing separates them, so none is ranked first. Check the paper invoice." };
   }
   return { tone: "neutral", title: "No single value explains the failed checks", candidates: [],
-    text: `This is expected when more than one value is misread: ${item.reason}. Check every number against the paper invoice, not only those in failed checks.` };
+    text: `This is expected when more than one value is misread: ${item.reason}. Other numbers can be wrong too without breaking any check: check every number on the invoice against the paper, not only those in failed checks.` };
 }
 
 // Model, latency and source, from the audit row written for this extraction.
@@ -547,18 +571,6 @@ function runDetails(audit) {
   const seconds = `${(audit.latency_ms / 1000).toFixed(1)} s`;
   if (audit.cache_hit) return `${audit.model} · from cache (original call ${seconds})`;
   return `${audit.model} · ${seconds} · live call`;
-}
-
-// Rows: one per line, then the totals. A cell is null where a check does not apply.
-function checkMap(checks) {
-  const lineCount = checks.reduce((n, c) => (c.line === null ? n : Math.max(n, c.line + 1)), 0);
-  const cells = (line) => CHECK_COLUMNS.map(([rule]) => {
-    const c = checks.find((x) => x.rule === rule && x.line === line);
-    return c ? { rule, outcome: c.outcome, reason: c.reason } : null;
-  });
-  const rows = Array.from({ length: lineCount }, (_, i) => ({ label: `Line ${i + 1}`, line: i, cells: cells(i) }));
-  rows.push({ label: "Totals", line: null, cells: cells(null) });
-  return { columns: CHECK_COLUMNS.map(([rule, label]) => ({ rule, label })), rows };
 }
 
 // The cells each per-line check reads: a failed check marks all of them in the table.
@@ -621,6 +633,48 @@ function flaggedFields(findings, keys) {
     }
   }
   return flagged;
+}
+
+// Which decisions fit an item; app/review.py refuses the others.
+const DECISIONS = {
+  accept: (item) => item.status !== "unresolvable",
+  checked_manually: (item) => item.status === "unresolvable",
+  reject: (item) => item.status !== "unresolvable",
+};
+const STATUS_WORDS = { suggested: "Suggestion", ambiguous: "Ambiguous", unresolvable: "Unresolvable" };
+
+function inboxEntry(item) {
+  return { reference: item.reference, status: item.status, word: STATUS_WORDS[item.status],
+    summary: plural(item.failed_checks.length, "failed check") };
+}
+
+// The review detail: the same issues and resolver wording as the extract screen, and
+// only the values a person checks against paper. A suggestion starts with its first
+// candidate chosen; an ambiguous item starts with none, since nothing ranks them.
+function reviewDetail(item) {
+  const panel = resolverPanel({ status: "queued", reference: item.reference }, item);
+  return {
+    heading: `Find paper invoice ${item.reference}`,
+    tone: panel.tone, title: panel.title, text: panel.text,
+    issues: issuesFromChecks(item.checks, item.failed_checks),
+    candidates: panel.candidates,
+    readings: item.status === "unresolvable"
+      ? item.involved.map((r) => ({ field: plainField(r.field), value: r.read_value, arabic: arabicIndic(r.read_value) }))
+      : [],
+    chosen: item.status === "suggested" ? 1 : null,
+    allowed: Object.keys(DECISIONS).filter((d) => DECISIONS[d](item)),
+  };
+}
+
+const KEYS = { a: "accept", m: "checked_manually", r: "reject", ArrowDown: "next", ArrowUp: "previous" };
+
+function shortcut(key) {
+  return KEYS[key.length === 1 ? key.toLowerCase() : key] || null;
+}
+
+function decisionBody(action, rank) {
+  if (action === "accept") return { decision: "accepted", rank };
+  return { decision: action === "reject" ? "rejected" : "checked_manually" };
 }
 
 function arabicIndic(value) {
@@ -919,7 +973,7 @@ function renderResolver(review, items) {
   if (queued) {
     const open = el("button", "btn", `Open ${review.reference} in the review queue`);
     open.type = "button";
-    open.addEventListener("click", () => showTab("review"));
+    open.addEventListener("click", () => showTab("review", review.reference));
     box.append(open);
   }
 }
@@ -991,12 +1045,13 @@ placePreview();
 function setText(id, value) { document.getElementById(id).textContent = value; }
 
 // ---- Tabs ----
-function showTab(name) {
+// reference: the review item to open, when coming from an extraction.
+function showTab(name, reference) {
   for (const tab of ["extract", "review"]) {
     document.getElementById(`tab-${tab}`).setAttribute("aria-selected", String(tab === name));
     document.getElementById(`view-${tab}`).hidden = tab !== name;
   }
-  if (name === "review") renderReviews();
+  if (name === "review") renderReviews(reference);
 }
 document.getElementById("tab-extract").addEventListener("click", () => showTab("extract"));
 document.getElementById("tab-review").addEventListener("click", () => showTab("review"));
@@ -1014,166 +1069,214 @@ async function loadReviews() {
     const response = await fetch("/reviews");
     if (!response.ok) return null;
     const items = await response.json();
-    setText("review-count", items.length ? `(${items.length})` : "");
+    setCount(items.length);
     return items;
   } catch {
     return null;
   }
 }
 
-async function renderReviews() {
-  const list = document.getElementById("reviews");
+function setCount(n) { setText("review-count", n ? `(${n})` : ""); }
+
+let queue = [];
+let selected = null;
+let chosenRank = null;
+let deciding = false;
+
+async function renderReviews(reference) {
   const items = await loadReviews();
+  document.getElementById("queue").classList.remove("show-detail");
+  queue = items || [];
+  const wanted = queue.find((i) => i.reference === reference);
+  if (wanted) selected = wanted.id;
+  if (!queue.some((i) => i.id === selected)) selected = queue.length ? queue[0].id : null;
+  drawInbox(items === null ? "The review queue could not be loaded." : "Nothing to review.");
+  select(selected);
+  if (wanted) showDetail();
+}
+
+// empty: what to say when there is nothing in the list.
+function drawInbox(empty) {
+  const list = document.getElementById("inbox");
   list.replaceChildren();
-  if (items === null) {
-    list.append(el("div", "none", "The review queue could not be loaded."));
-  } else if (items.length === 0) {
-    list.append(el("div", "none", "Nothing to review."));
+  if (queue.length === 0) list.append(el("li", "none", empty));
+  for (const item of queue) {
+    const entry = inboxEntry(item);
+    const button = el("button");
+    button.type = "button";
+    button.id = `inbox-${item.id}`;
+    button.append(el("span", "ref", entry.reference), el("span", `tag ${entry.status}`, entry.word),
+      el("span", "sub", `${entry.summary} · ${new Date(item.created_utc).toLocaleString()}`));
+    button.addEventListener("click", () => { select(item.id); showDetail(); });
+    const li = el("li");
+    li.append(button);
+    list.append(li);
   }
-  for (const item of items || []) list.append(reviewCard(item));
 }
 
-function reviewCard(item) {
-  const card = el("article", "review");
-  const top = el("div", "top");
-  top.append(
-    el("span", "ref", item.reference),
-    el("span", `tag ${item.status}`, item.status),
-    el("span", "when", `Uploaded ${new Date(item.created_utc).toLocaleString()}`),
-  );
-  card.append(top);
-  if (item.status === "suggested") {
-    const best = item.candidates[0];
-    card.append(el("div", "", `The model read ${plainField(best.field)} as ${best.read_value} (${arabicIndic(best.read_value)}).`));
-  } else if (item.status === "ambiguous") {
-    card.append(el("div", "banner", "Ambiguous: more than one value fits the arithmetic equally well, so none is marked as the answer. Check the paper invoice."));
-  } else {
-    card.append(el("div", "banner",
-      `Unresolvable: ${item.reason}. The values listed below sit in the failed checks, but other numbers can be wrong too without breaking any check: check every number on the invoice against the paper, not only these.`));
+function select(id) {
+  selected = id;
+  for (const b of document.querySelectorAll("#inbox button")) b.setAttribute("aria-current", String(b.id === `inbox-${id}`));
+  drawDetail();
+}
+
+// Narrow screens show the list or the detail, not both.
+function showDetail() {
+  document.getElementById("queue").classList.add("show-detail");
+  if (!wide.matches) document.getElementById("detail-heading")?.focus();
+}
+
+document.getElementById("back").addEventListener("click", () => {
+  document.getElementById("queue").classList.remove("show-detail");
+  document.getElementById(`inbox-${selected}`)?.focus();
+});
+
+function selectedItem() { return queue.find((i) => i.id === selected); }
+
+function drawDetail() {
+  const item = selectedItem();
+  document.getElementById("detail").hidden = !item;
+  if (!item) return;
+  const d = reviewDetail(item);
+  chosenRank = d.chosen;
+  const heading = el("h2", "find", "Find paper invoice");
+  heading.id = "detail-heading";
+  heading.tabIndex = -1;
+  heading.append(" ", el("span", "ref", item.reference));
+  const meta = el("div", "meta");
+  meta.append(el("span", `tag ${item.status}`, STATUS_WORDS[item.status]), `Uploaded ${new Date(item.created_utc).toLocaleString()}`);
+  const panel = el("div", `resolver-box ${d.tone}`);
+  const title = el("h3");
+  title.append(icon(TONE_ICONS[d.tone]), d.title);
+  panel.append(title, el("p", "", d.text));
+  const body = document.getElementById("detail-body");
+  body.replaceChildren(heading, meta, panel, el("h3", "label", "Issues"), issuesList(d.issues, "review-"));
+  if (d.candidates.length) body.append(el("h3", "label", "Values consistent with the checks"), choices(d.candidates));
+  if (d.readings.length) body.append(el("h3", "label", "Values as read in the failed checks"), readings(d.readings));
+  drawBar(item, d);
+}
+
+// Western digits large, the Arabic-Indic form below, as printed on many invoices.
+function pair(caption, value, arabic) {
+  const box = el("span", "pair");
+  box.append(el("span", "cap", caption), ltr("big", value), ltr("ar", arabic));
+  return box;
+}
+
+function choices(candidates) {
+  const group = el("div", "choices");
+  group.setAttribute("role", "radiogroup");
+  group.setAttribute("aria-label", "Values consistent with the checks");
+  for (const c of candidates) {
+    const input = el("input");
+    input.type = "radio";
+    input.name = "candidate";
+    input.checked = c.rank === chosenRank;
+    input.addEventListener("change", () => { chosenRank = c.rank; drawBar(selectedItem()); });
+    const field = el("span", "", c.field);
+    if (c.first) field.append(" ", el("span", "chip small queued", "Ranked first"));
+    const choice = el("label", "choice");
+    choice.append(input, field, pair("Read", c.read, c.readArabic), el("span", "arrow", "→"),
+      pair("Consistent with checks", c.value, c.arabic), el("span", "why", c.why));
+    group.append(choice);
   }
-  card.append(el("h3", "", "Failed checks"));
-  const checks = el("ul");
-  for (const label of item.failed_checks) checks.append(el("li", "", plainCheck(label)));
-  card.append(checks);
-  card.append(el("h3", "", "Arithmetic checks"));
-  const map = el("div", "checkmap");
-  map.append(item.checks === null
-    ? el("div", "none", "Not recorded: this item was queued before check results were stored.")
-    : checkMapTable(item.checks));
-  card.append(map);
-  card.append(item.status === "unresolvable" ? readingsTable(item) : candidatesTable(item));
-  card.append(actions(item));
-  return card;
+  return group;
 }
 
-function readingsTable(item) {
-  const wrap = el("div");
-  wrap.append(el("h3", "", "Values as read"));
-  const table = el("table");
-  const body = el("tbody");
-  for (const r of item.involved) {
-    const row = el("tr");
-    row.append(el("th", "key", plainField(r.field)), el("td", "num", r.read_value), el("td", "num arabic", arabicIndic(r.read_value)));
-    body.append(row);
+function readings(values) {
+  const list = el("div", "choices");
+  for (const r of values) {
+    const row = el("div", "reading");
+    row.append(el("span", "", r.field), pair("Read", r.value, r.arabic));
+    list.append(row);
   }
-  table.append(body);
-  wrap.append(table);
-  return wrap;
+  return list;
 }
 
-function candidatesTable(item) {
-  const wrap = el("div");
-  wrap.append(el("h3", "", "Candidates, most likely first"));
-  const table = el("table");
-  const head = el("tr");
-  for (const h of ["#", "Field", "Read", "Suggested", "", "Why", ""]) head.append(el("th", "", h));
-  const thead = el("thead");
-  thead.append(head);
-  const body = el("tbody");
-  for (const c of item.candidates) {
-    const isTop = item.status === "suggested" && c.rank === 1;
-    const row = el("tr", isTop ? "is-top" : "");
-    const rank = el("td", "num", String(c.rank));
-    const accept = el("button", "act primary", "Accept");
-    accept.addEventListener("click", () => decide(item, { decision: "accepted", rank: c.rank }, card(row)));
-    const cell = el("td");
-    if (isTop) cell.append(el("span", "top-pick", "Top"), " ");
-    cell.append(accept);
-    row.append(rank, el("td", "", plainField(c.field)), el("td", "num", c.read_value),
-      el("td", "num", c.value), el("td", "num arabic", arabicIndic(c.value)), el("td", "", EDITS[c.edit] || c.edit), cell);
-    body.append(row);
+const DONE = { accept: "accepted", checked_manually: "marked checked manually", reject: "rejected" };
+
+function drawBar(item, d = reviewDetail(item)) {
+  const chosen = d.candidates.find((c) => c.rank === chosenRank);
+  const accept = document.getElementById("act-accept");
+  accept.replaceChildren(el("kbd", "", "A"), chosen ? ` Accept ${chosen.value}` : " Accept");
+  accept.disabled = deciding || !d.allowed.includes("accept") || !chosen;
+  for (const action of ["checked_manually", "reject"]) {
+    document.getElementById(`act-${action}`).disabled = deciding || !d.allowed.includes(action);
   }
-  table.append(thead, body);
-  wrap.append(table);
-  return wrap;
+  setText("act-hint", !d.allowed.includes("accept")
+    ? "Nothing to accept or reject. Check every value against the paper, then mark it checked manually."
+    : chosen ? "Accept the chosen value once the paper agrees, or reject them all."
+      : "Choose a value to accept it, or reject them all.");
 }
 
-function card(node) { return node.closest("article"); }
-
-const OUTCOME_TEXT = { pass: "Pass", fail: "Fail", not_checked: "Not checked" };
-
-function checkMapTable(checks) {
-  const { columns, rows } = checkMap(checks);
-  const table = el("table");
-  const head = el("tr");
-  head.append(el("th", "", ""));
-  for (const c of columns) head.append(el("th", "", c.label));
-  const thead = el("thead");
-  thead.append(head);
-  const body = el("tbody");
-  for (const row of rows) {
-    const tr = el("tr");
-    tr.append(el("th", "key", row.label));
-    for (const cell of row.cells) {
-      if (cell === null) {
-        tr.append(el("td", "na", "—"));
-        continue;
-      }
-      const td = el("td", cell.outcome, OUTCOME_TEXT[cell.outcome]);
-      if (cell.outcome === "not_checked") td.title = cell.reason;
-      if (cell.outcome === "fail") td.title = RULE_SENTENCES[cell.rule](row.line === null ? null : row.line + 1);
-      tr.append(td);
-    }
-    body.append(tr);
+async function decide(action) {
+  const item = selectedItem();
+  if (!item || deciding) return;
+  const button = document.getElementById(`act-${action}`);
+  if (button.disabled) {
+    setText("review-status", document.getElementById("act-hint").textContent);
+    return;
   }
-  table.append(thead, body);
-  return table;
-}
-
-function actions(item) {
-  const bar = el("div", "actions");
-  const button = item.status === "unresolvable"
-    ? el("button", "act", "Checked manually")
-    : el("button", "act", "Reject all candidates");
-  const body = item.status === "unresolvable" ? { decision: "checked_manually" } : { decision: "rejected" };
-  button.addEventListener("click", () => decide(item, body, card(button)));
-  bar.append(button);
-  return bar;
-}
-
-async function decide(item, body, cardNode) {
-  for (const b of cardNode.querySelectorAll("button")) b.disabled = true;
-  cardNode.querySelector(".fail")?.remove();
+  if (action === "reject" && !confirm(`Reject every suggested value for ${item.reference}? The decision is recorded and the item leaves the queue.`)) return;
+  deciding = true;
+  drawBar(item);
+  setText("review-status", `Recording ${item.reference}…`);
   try {
     const response = await fetch(`/reviews/${encodeURIComponent(item.id)}/decision`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(body),
+      body: JSON.stringify(decisionBody(action, chosenRank)),
     });
     if (!response.ok) {
       const detail = await response.json().catch(() => ({}));
       throw new Error(typeof detail.detail === "string" ? detail.detail : `HTTP ${response.status}`);
     }
-    cardNode.remove();
-    await loadReviews();
-    if (!document.querySelector("#reviews .review")) renderReviews();
   } catch (err) {
-    cardNode.append(el("div", "fail", `Not recorded: ${err.message}`));
-    for (const b of cardNode.querySelectorAll("button")) b.disabled = false;
+    setText("review-status", `${item.reference} not recorded: ${err.message}`);
+    deciding = false;
+    drawBar(item);
+    return;
   }
+  deciding = false;
+  const index = queue.indexOf(item);
+  queue.splice(index, 1);
+  setCount(queue.length);
+  setText("review-status", `${item.reference} ${DONE[action]}. Recorded only: no extracted value changes.`);
+  drawInbox("Nothing left to review.");
+  select(queue.length ? queue[Math.min(index, queue.length - 1)].id : null);
 }
 
+function move(step) {
+  const index = queue.findIndex((i) => i.id === selected);
+  const next = queue[index + step];
+  if (!next) return;
+  select(next.id);
+  const button = document.getElementById(`inbox-${next.id}`);
+  button.scrollIntoView({ block: "nearest" });
+  if (wide.matches || !document.getElementById("queue").classList.contains("show-detail")) button.focus();
+}
+
+for (const action of ["accept", "checked_manually", "reject"]) {
+  document.getElementById(`act-${action}`).addEventListener("click", () => decide(action));
+}
+
+// Shortcuts work anywhere on the review tab except while a dialog is open; arrows
+// on a radio button are left to it, where they change the chosen value.
+document.addEventListener("keydown", (e) => {
+  if (document.getElementById("view-review").hidden || e.ctrlKey || e.metaKey || e.altKey) return;
+  if (document.querySelector("dialog[open]")) return;
+  const action = shortcut(e.key);
+  if (action === null) return;
+  const moving = action === "next" || action === "previous";
+  if (moving && e.target.type === "radio") return;
+  e.preventDefault();
+  if (moving) move(action === "next" ? 1 : -1);
+  else decide(action);
+});
+
 loadReviews();
+
+const OUTCOME_TEXT = { pass: "Pass", fail: "Fail", not_checked: "Not checked" };
 
 const SEVERITY_CELLS = { error: "flagged", warning: "warned" };
 

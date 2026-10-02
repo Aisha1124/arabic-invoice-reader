@@ -82,7 +82,8 @@ POST /extract (raw PNG/JPEG body, ≤10 MB, in memory only)
   → JSON response (200 for both "ok" and "needs_review"), with `checks` (every arithmetic
     check: pass, fail or not checked and why, with the computed value and the
     difference read − computed; the review queue keeps the outcome, not the amounts) and `review` (null, queued with its
-    reference, or error); the page draws these as the pipeline strip and check map
+    reference, or error); the page draws these as the pipeline strip, the totals block
+    and the Checks column of the line-item table
 
 GET  /reviews                       pending reviews
 POST /reviews/{id}/decision         accepted (with rank) | rejected | checked_manually
@@ -136,7 +137,7 @@ whole-number quantities, and ignoring the confusion table. Each break made 1 or
   outside the failed checks because the wrong values still add up. On the five
   failing invoices above, 9 of 42 misread values were outside every failed
   check (on INV-2026-1002, 2 of 13), so they are not among the values a review
-  card lists. The card says so.
+  item lists. The review detail says so.
 - **Small test sets.** 29 Arabic-Indic lines, 32 verification questions, and
   6 Arabic-Indic synthetic invoices. The confusion table behind the ranking
   comes from those same 29 lines.

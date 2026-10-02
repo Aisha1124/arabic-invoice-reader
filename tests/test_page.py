@@ -14,7 +14,8 @@ from pathlib import Path
 import pytest
 
 from app.resolve import _checks, resolve
-from app.schema import Invoice, LineItem, ReviewOutcome
+from app.review import _check_fits
+from app.schema import Invoice, LineItem, ReviewItem, ReviewOutcome
 from app.validate import ARITHMETIC_CHECKS, validate
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -130,7 +131,7 @@ def test_findings_and_review_cards_use_the_same_words() -> None:
     assert "Line 3: quantity × unit price does not equal the line total" in from_cards
 
 
-# --- pipeline strip and check map ------------------------------------------------
+# --- pipeline strip ------------------------------------------------
 
 
 def _line(quantity: str, unit_price: str, line_total: str, vat: str) -> LineItem:
@@ -265,52 +266,6 @@ def test_non_arithmetic_error_is_red_but_needs_no_resolver() -> None:
     ]
 
 
-def _map(checks: list[dict]) -> dict:
-    return _run(f"console.log(JSON.stringify(checkMap({json.dumps(checks)})))")
-
-
-def _grid(checks: list[dict]) -> list[list[str]]:
-    return [
-        [row["label"], *(c["outcome"] if c else "-" for c in row["cells"])]
-        for row in _map(checks)["rows"]
-    ]
-
-
-def test_check_map_has_a_row_per_line_and_a_totals_row() -> None:
-    checks = _response(MISREAD)["checks"]
-
-    assert _grid(checks) == [
-        ["Line 1", "fail", "pass", "-", "-", "-"],
-        ["Line 2", "pass", "pass", "-", "-", "-"],
-        ["Totals", "-", "-", "pass", "pass", "pass"],
-    ]
-    assert len(_map(checks)["columns"]) == 5
-
-
-def test_check_map_shows_skipped_checks_as_not_checked_with_the_reason() -> None:
-    lumped = _two_lines(
-        line_items=[
-            _line("2", "100.00", "200.00", "0"),
-            _line("1", "50.00", "50.00", "0"),
-        ]
-    )
-    checks = _response(lumped)["checks"]
-
-    grid = _grid(checks)
-    assert grid[0] == ["Line 1", "pass", "not_checked", "-", "-", "-"]
-    assert grid[2] == ["Totals", "-", "-", "pass", "not_checked", "pass"]
-    cell = _map(checks)["rows"][0]["cells"][1]
-    assert cell["reason"] == next(
-        c["reason"] for c in checks if c["outcome"] == "not_checked"
-    )
-
-
-def test_check_map_without_line_items_is_the_totals_row_only() -> None:
-    checks = _response(_two_lines(line_items=[]))["checks"]
-
-    assert _grid(checks) == [["Totals", "-", "-", "not_checked", "not_checked", "pass"]]
-
-
 def test_strip_is_drawn_inside_the_result_only_and_nothing_waits() -> None:
     """The result is hidden on an HTTP error, so the strip is never drawn for one.
     No artificial delays: no setTimeout anywhere on the page."""
@@ -320,7 +275,6 @@ def test_strip_is_drawn_inside_the_result_only_and_nothing_waits() -> None:
     main = PAGE[PAGE.index('<script id="wording">') :]
     main = main[main.index("</script>") :]
     assert "pipelineStages(result)" in main
-    assert "checkMap(" in main
 
 
 # --- step 2: verdict bar, run details, local fonts, local preview ----------------
@@ -746,3 +700,137 @@ def test_a_fresh_upload_resets_the_preview_to_actual_size() -> None:
     show = PAGE[PAGE.index("function showPreview(") :]
     show = show[: show.index("\n}\n")]
     assert 'setZoom("actual")' in show
+
+
+# --- step 5: review queue ---------------------------------------------------------
+
+
+def _detail(item: dict) -> dict:
+    return _js(f"reviewDetail({json.dumps(item)})")
+
+
+def _stored(invoice: Invoice) -> dict:
+    """A review item with the check outcomes the queue stores."""
+    item = _item(invoice)
+    item["checks"] = [
+        {k: c[k] for k in ("rule", "line", "outcome", "reason")}
+        for c in _response(invoice)["checks"]
+    ]
+    return item
+
+
+def test_inbox_entry_names_the_reference_status_and_failed_checks() -> None:
+    item = _item(_one_line("12.43"))
+    entry = _js(f"inboxEntry({json.dumps(item)})")
+    n = len(item["failed_checks"])
+
+    assert entry["reference"] == "R-0007"
+    assert (entry["status"], entry["word"]) == ("suggested", "Suggestion")
+    assert entry["summary"] == f"{n} failed check{'' if n == 1 else 's'}"
+
+
+def test_suggestion_detail_starts_on_the_first_candidate() -> None:
+    d = _detail(_stored(_one_line("12.43")))
+
+    assert d["heading"] == "Find paper invoice R-0007"
+    assert d["chosen"] == 1
+    assert d["allowed"] == ["accept", "reject"]
+    first = d["candidates"][0]
+    assert (first["read"], first["readArabic"]) == ("12.43", "١٢٫٤٣")
+    assert (first["value"], first["arabic"]) == ("13.43", "١٣٫٤٣")
+    assert d["readings"] == []
+    assert d["issues"][0]["sentence"] == (
+        "Line 1: quantity × unit price does not equal the line total"
+    )
+
+
+def test_ambiguous_detail_chooses_nothing_for_the_person() -> None:
+    d = _detail(_stored(AMBIGUOUS))
+
+    assert d["chosen"] is None
+    assert d["allowed"] == ["accept", "reject"]
+    assert len(d["candidates"]) > 1
+
+
+def test_unresolvable_detail_shows_the_values_read_and_only_checked_manually() -> None:
+    item = _stored(_one_line("12.43", total="99.99"))
+    d = _detail(item)
+
+    assert d["allowed"] == ["checked_manually"]
+    assert d["candidates"] == []
+    assert [r["field"] for r in d["readings"]] == [
+        _js(f"plainField({json.dumps(r['field'])})") for r in item["involved"]
+    ]
+    assert all(r["arabic"] for r in d["readings"])
+    assert "check every number on the invoice" in d["text"]
+
+
+def test_legacy_item_detail_falls_back_to_stored_labels() -> None:
+    item = _item(_one_line("12.43"))
+    item["checks"] = None
+
+    assert [i["sentence"] for i in _detail(item)["issues"]] == [
+        _js(f"plainCheck({json.dumps(label)})") for label in item["failed_checks"]
+    ]
+
+
+@pytest.mark.parametrize("status", ["suggested", "ambiguous", "unresolvable"])
+def test_page_offers_exactly_the_decisions_the_queue_accepts(status: str) -> None:
+    invoice = {
+        "suggested": _one_line("12.43"),
+        "ambiguous": AMBIGUOUS,
+        "unresolvable": _one_line("12.43", total="99.99"),
+    }[status]
+    raw = _stored(invoice)
+    item = ReviewItem(
+        **raw,
+        id="x",
+        created_utc="2026-10-02T00:00:00",
+        audit_id="a",
+        image_sha256="0" * 64,
+    )
+    accepted_by_queue = []
+    for action, decision in [
+        ("accept", "accepted"),
+        ("checked_manually", "checked_manually"),
+        ("reject", "rejected"),
+    ]:
+        try:
+            _check_fits(item, decision)
+        except ValueError:
+            continue
+        accepted_by_queue.append(action)
+
+    assert _detail(raw)["allowed"] == accepted_by_queue
+
+
+def test_shortcuts_and_decision_bodies() -> None:
+    keys = ["a", "A", "m", "r", "R", "ArrowDown", "ArrowUp", "x", "Enter"]
+    assert _js(f"{json.dumps(keys)}.map(shortcut)") == [
+        "accept",
+        "accept",
+        "checked_manually",
+        "reject",
+        "reject",
+        "next",
+        "previous",
+        None,
+        None,
+    ]
+    assert _js(
+        '["accept", "checked_manually", "reject"].map((a) => decisionBody(a, 2))'
+    ) == [
+        {"decision": "accepted", "rank": 2},
+        {"decision": "checked_manually"},
+        {"decision": "rejected"},
+    ]
+
+
+def test_review_view_has_inbox_detail_and_a_sticky_action_bar() -> None:
+    review = PAGE[PAGE.index('<div id="view-review"') : PAGE.index("</main>")]
+    assert 'id="inbox"' in review and 'id="detail"' in review
+    for key in ("A", "M", "R"):
+        assert f'aria-keyshortcuts="{key}"' in review
+    assert re.search(r"\.actionbar \{ position: sticky; inset-block-end: 0;", PAGE)
+    assert 'action === "reject" && !confirm(' in PAGE
+    assert "checkMap" not in PAGE and 'class="checkmap"' not in PAGE
