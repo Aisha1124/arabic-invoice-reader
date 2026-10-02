@@ -8,7 +8,7 @@ import pytest
 
 from app import review, store
 from app.resolve import resolve
-from app.schema import CheckStatus, Invoice, LineItem, Reading, Resolution
+from app.schema import CheckStatus, CrossCheck, Invoice, LineItem, Reading, Resolution
 from app.store import read_resolver_events
 from app.validate import validate
 
@@ -339,8 +339,10 @@ def test_stored_check_outcomes_hold_no_amounts(db: Path) -> None:
 def test_queue_created_before_check_outcomes_is_migrated(db: Path) -> None:
     """A review_queue made by the previous version has no checks column. Its pending
     rows come back with checks None: not recorded, never invented."""
-    legacy = review.CREATE_QUEUE.replace(",\n    checks         TEXT", "")
-    assert legacy != review.CREATE_QUEUE and "\n    checks " not in legacy
+    legacy = review.CREATE_QUEUE.replace(",\n    checks         TEXT", "").replace(
+        ",\n    cross_checks   TEXT", ""
+    )
+    assert "\n    checks " not in legacy and "cross_checks" not in legacy
     db.parent.mkdir(parents=True)
     with sqlite3.connect(db) as conn:
         conn.execute(legacy)
@@ -367,3 +369,91 @@ def test_queue_created_before_check_outcomes_is_migrated(db: Path) -> None:
     other_sha = hashlib.sha256(b"other image").hexdigest()
     review.submit(AUDIT_ID, other_sha, resolve(_invoice()), CHECKS)
     assert [item.checks for item in review.pending()] == [None, STORED]
+
+
+# --- cross-checks: QR disagreements and date-vs-timestamp --------------------------
+
+QR_TOTAL = CrossCheck(rule="total_matches_qr", fields=["total"])
+QR_VAT = CrossCheck(rule="seller_vat_number_matches_qr", fields=["seller_vat_number"])
+CLEAN_CHECKS = validate(_invoice(unit_price="13.43"), {}).checks
+
+
+def test_cross_check_alone_is_queued_for_checked_manually_only() -> None:
+    item = review.submit(AUDIT_ID, SHA, None, CLEAN_CHECKS, [QR_TOTAL, QR_VAT])
+
+    assert item.status == "cross_check"
+    assert item.cross_checks == [QR_TOTAL, QR_VAT]
+    assert (item.candidates, item.involved, item.failed_checks) == ([], [], [])
+    for decision, rank in (("accepted", 1), ("rejected", None)):
+        with pytest.raises(ValueError, match="checked_manually"):
+            review.decide(item.id, decision, rank)
+    review.decide(item.id, "checked_manually")
+    assert review.pending() == []
+
+
+def test_cross_checks_are_stored_as_rule_names_and_paths_only(db: Path) -> None:
+    review.submit(AUDIT_ID, SHA, None, CLEAN_CHECKS, [QR_TOTAL, QR_VAT])
+    with sqlite3.connect(db) as conn:
+        (stored,) = conn.execute("SELECT cross_checks FROM review_queue").fetchone()
+
+    assert json.loads(stored) == [
+        {"rule": "total_matches_qr", "fields": ["total"]},
+        {"rule": "seller_vat_number_matches_qr", "fields": ["seller_vat_number"]},
+    ]
+    assert SELLER_VAT not in _dump(db)
+
+
+def test_arithmetic_with_a_cross_check_keeps_the_resolver_outcome() -> None:
+    item = review.submit(AUDIT_ID, SHA, resolve(_invoice()), CHECKS, [QR_TOTAL])
+
+    assert item.status == "suggested"
+    assert item.cross_checks == [QR_TOTAL]
+
+
+def test_cross_check_events_name_the_rules_and_nothing_else() -> None:
+    item = review.submit(AUDIT_ID, SHA, None, CLEAN_CHECKS, [QR_TOTAL])
+    review.decide(item.id, "checked_manually")
+
+    decided, submitted = read_resolver_events(10)
+    assert (submitted.event, decided.event) == ("cross_check", "checked_manually")
+    for event in (submitted, decided):
+        assert json.loads(event.failed_checks) == ["total_matches_qr"]
+        assert (event.field, event.rank, event.candidates) == (None, None, 0)
+
+
+def test_submit_needs_a_resolution_or_a_cross_check() -> None:
+    with pytest.raises(ValueError, match="nothing to review"):
+        review.submit(AUDIT_ID, SHA, None, CLEAN_CHECKS, [])
+
+
+def test_queue_created_before_cross_checks_is_migrated(db: Path) -> None:
+    """Rows queued before cross-checks were stored come back with None: whether
+    they had a date mismatch then was never recorded."""
+    legacy = review.CREATE_QUEUE.replace(",\n    cross_checks   TEXT", "")
+    assert "cross_checks" not in legacy
+    db.parent.mkdir(parents=True)
+    with sqlite3.connect(db) as conn:
+        conn.execute(legacy)
+        conn.execute(
+            "INSERT INTO review_queue VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            (
+                "old",
+                "R-0900",
+                "2026-09-30T00:00:00+00:00",
+                AUDIT_ID,
+                SHA,
+                "unresolvable",
+                "r",
+                "[]",
+                "[]",
+                "[]",
+                "[]",
+            ),
+        )
+    conn.close()
+
+    (old,) = review.pending()
+    assert old.cross_checks is None
+    other_sha = hashlib.sha256(b"other image").hexdigest()
+    review.submit(AUDIT_ID, other_sha, None, CLEAN_CHECKS, [QR_TOTAL])
+    assert [item.cross_checks for item in review.pending()] == [None, [QR_TOTAL]]

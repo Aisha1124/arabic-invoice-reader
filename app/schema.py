@@ -77,12 +77,34 @@ class CheckOutcome(CheckStatus):
     difference: Decimal | None = None  # the value read minus computed
 
 
+class QrPayload(BaseModel):
+    """ZATCA TLV tags 1-5 from the invoice's QR code, decoded without a model. Same
+    privacy class as extracted fields: never logged, never queued."""
+
+    seller_name: str
+    seller_vat_number: str
+    timestamp: (
+        datetime  # naive wall clock: the zone is dropped, as for invoice_timestamp
+    )
+    total: Decimal
+    vat_total: Decimal
+
+
+class QrStatus(BaseModel):
+    """Whether the QR cross-check ran. The payload itself is not returned: its
+    disagreements are in the findings, which quote both sides."""
+
+    status: Literal["read", "not_read"]
+    reason: str | None = None  # why not read; names the failure, never the payload
+
+
 class ExtractionResult(BaseModel):
     invoice: Invoice
     confidences: list[FieldConfidence]
     findings: list[Finding]
     status: Literal["ok", "needs_review"]
     checks: list[CheckOutcome]
+    qr: QrStatus
 
 
 class ReviewOutcome(BaseModel):
@@ -91,11 +113,12 @@ class ReviewOutcome(BaseModel):
 
     status: Literal["queued", "error"]
     reference: str | None = None
+    # None when queued for a cross-check only: there was no arithmetic to resolve.
     resolver_status: Literal["suggested", "ambiguous", "unresolvable"] | None = None
 
 
 class ExtractResponse(ExtractionResult):
-    review: ReviewOutcome | None  # None: no arithmetic finding, nothing to resolve
+    review: ReviewOutcome | None  # None: no error finding, nothing to review
 
 
 Edit = Literal[
@@ -136,6 +159,14 @@ class Resolution(BaseModel):
     involved: list[Reading] = []
 
 
+class CrossCheck(BaseModel):
+    """A failed cross-check (QR disagreement, date vs timestamp) as the review queue
+    keeps it: the rule and the field paths to check against paper, never values."""
+
+    rule: str
+    fields: list[str]
+
+
 class ReviewItem(BaseModel):
     """A pending review. Amounts and field paths only: no names, VAT numbers,
     descriptions or images."""
@@ -145,12 +176,16 @@ class ReviewItem(BaseModel):
     created_utc: str
     audit_id: str
     image_sha256: str
-    status: Literal["suggested", "ambiguous", "unresolvable"]
+    # cross_check: queued for a cross-check alone, with nothing for the resolver.
+    status: Literal["suggested", "ambiguous", "unresolvable", "cross_check"]
     reason: str
     failed_checks: list[str]
     candidates: list[Candidate]
     involved: list[Reading]
     checks: list[CheckStatus] | None  # None: queued before check outcomes were stored
+    cross_checks: (
+        list[CrossCheck] | None
+    )  # None: queued before cross-checks were stored
 
 
 class CallMetadata(BaseModel):

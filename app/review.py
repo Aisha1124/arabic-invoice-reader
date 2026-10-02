@@ -1,8 +1,12 @@
 """
-Review queue for resolver results. A person decides each one: accepts a ranked
-candidate or rejects them all; an unresolvable invoice is closed as checked
-manually. Nothing here changes an invoice value: accepting records the decision,
-it does not apply it.
+Review queue for resolver results and failed cross-checks. A person decides each
+one: accepts a ranked candidate or rejects them all; an unresolvable invoice, or
+one queued for a cross-check alone (a QR disagreement, a date that does not match
+its timestamp), is closed as checked manually. Nothing here changes an invoice
+value: accepting records the decision, it does not apply it.
+
+A cross-check is stored as its rule name and field paths only, never the values
+on either side: a QR disagreement can be about a VAT number.
 
 The queue holds what a reviewer needs to decide: field paths, the values read
 and the candidate values. It never holds names, VAT numbers, descriptions or
@@ -22,12 +26,13 @@ not live there.
 import json
 import re
 import uuid
+from collections.abc import Sequence
 from datetime import UTC, datetime
 from typing import Any, Literal
 
 from app import store
 from app.resolve import LINE_CELLS, TOTAL_CELLS
-from app.schema import CheckOutcome, CheckStatus, Resolution, ReviewItem
+from app.schema import CheckOutcome, CheckStatus, CrossCheck, Resolution, ReviewItem
 
 Decision = Literal["accepted", "rejected", "checked_manually"]
 
@@ -43,18 +48,22 @@ CREATE TABLE IF NOT EXISTS review_queue (
     failed_checks  TEXT NOT NULL,
     candidates     TEXT NOT NULL,
     involved       TEXT NOT NULL,
-    checks         TEXT
+    checks         TEXT,
+    cross_checks   TEXT
 )
 """
-# Queues made before check outcomes were stored lack the column; their rows keep NULL.
-ADD_CHECKS = "ALTER TABLE review_queue ADD COLUMN checks TEXT"
+# Queues made before these were stored lack the columns; their rows keep NULL.
+ADDED_COLUMNS = ("checks", "cross_checks")
 # SQLite only: AUTOINCREMENT never reuses a number, even after rows are removed.
 CREATE_COUNTER = (
     "CREATE TABLE IF NOT EXISTS review_counter (n INTEGER PRIMARY KEY AUTOINCREMENT)"
 )
 NEXT_NUMBER = "INSERT INTO review_counter DEFAULT VALUES RETURNING n"
 QUEUE_COLUMNS = tuple(ReviewItem.model_fields)
-JSON_COLUMNS = ("failed_checks", "candidates", "involved", "checks")
+JSON_COLUMNS = ("failed_checks", "candidates", "involved", "checks", "cross_checks")
+CROSS_CHECK_REASON = "fields disagree with the QR code or with each other"
+# Statuses with nothing to accept or reject.
+MANUAL_ONLY = ("unresolvable", "cross_check")
 INSERT_QUEUE = f"INSERT INTO review_queue ({', '.join(QUEUE_COLUMNS)}) VALUES ({', '.join('?' * len(QUEUE_COLUMNS))})"
 SELECT = f"SELECT {', '.join(QUEUE_COLUMNS)} FROM review_queue"
 SELECT_PENDING = f"{SELECT} ORDER BY created_utc, id"
@@ -71,8 +80,9 @@ def _create(conn: Any) -> None:
     columns = {
         d[0] for d in conn.execute("SELECT * FROM review_queue LIMIT 0").description
     }
-    if "checks" not in columns:
-        conn.execute(ADD_CHECKS)
+    for column in ADDED_COLUMNS:
+        if column not in columns:
+            conn.execute(f"ALTER TABLE review_queue ADD COLUMN {column} TEXT")
 
 
 def _to_db(item: ReviewItem) -> tuple[Any, ...]:
@@ -106,20 +116,14 @@ def _from_db(values: tuple[Any, ...]) -> ReviewItem:
 def submit(
     audit_id: str,
     image_sha256: str,
-    resolution: Resolution,
+    resolution: Resolution | None,
     checks: list[CheckOutcome],
+    cross_checks: Sequence[CrossCheck] = (),
 ) -> ReviewItem:
-    """Queues the result and logs it; returns the queued item. An image that already
-    has a pending review keeps it, and that item is returned: nothing new is queued
-    or logged."""
-    if resolution.status == "not_needed":
-        raise ValueError(
-            "resolution status is not_needed: there is nothing to review or log"
-        )
-    if not store.SHA256_HEX.fullmatch(image_sha256):
-        raise ValueError(
-            f"image_sha256 must be 64 lowercase hex characters, received {image_sha256!r}"
-        )
+    """Queues the result and logs it; returns the queued item. `resolution` is None
+    when only cross-checks failed. An image that already has a pending review keeps
+    it, and that item is returned: nothing new is queued or logged."""
+    _check_submittable(image_sha256, resolution, cross_checks)
     with store.connection() as (conn, placeholder):
         _create(conn)
         existing = conn.execute(
@@ -134,19 +138,57 @@ def submit(
             created_utc=datetime.now(UTC).isoformat(timespec="microseconds"),
             audit_id=audit_id,
             image_sha256=image_sha256,
-            **resolution.model_dump(include={"status", "reason", "failed_checks"}),
-            candidates=resolution.candidates,
-            involved=resolution.involved,
+            **_resolved(resolution),
             # The queue keeps the values read in the failed checks (involved) and
             # no more, so the computed values and differences are dropped here.
             checks=[
                 CheckStatus(**c.model_dump(include=set(CheckStatus.model_fields)))
                 for c in checks
             ],
+            cross_checks=list(cross_checks),
         )
         conn.execute(INSERT_QUEUE.replace("?", placeholder), _to_db(item))
         store.insert_resolver_event(conn, placeholder, _submitted_event(item))
     return item
+
+
+def _check_submittable(
+    image_sha256: str, resolution: Resolution | None, cross_checks: Sequence[CrossCheck]
+) -> None:
+    if resolution is not None and resolution.status == "not_needed":
+        raise ValueError(
+            "resolution status is not_needed: there is nothing to review or log"
+        )
+    if resolution is None and not cross_checks:
+        raise ValueError(
+            "no resolution and no failed cross-check: there is nothing to review"
+        )
+    if not store.SHA256_HEX.fullmatch(image_sha256):
+        raise ValueError(
+            f"image_sha256 must be 64 lowercase hex characters, received {image_sha256!r}"
+        )
+
+
+def _resolved(resolution: Resolution | None) -> dict[str, Any]:
+    """The item's resolver fields; a cross-check alone has nothing to suggest."""
+    if resolution is None:
+        return {
+            "status": "cross_check",
+            "reason": CROSS_CHECK_REASON,
+            "failed_checks": [],
+            "candidates": [],
+            "involved": [],
+        }
+    return {
+        **resolution.model_dump(include={"status", "reason", "failed_checks"}),
+        "candidates": resolution.candidates,
+        "involved": resolution.involved,
+    }
+
+
+def _logged_checks(item: ReviewItem) -> list[str]:
+    """What the resolver log names: failed checks and cross-check rules, never values."""
+    return item.failed_checks + [c.rule for c in item.cross_checks or []]
 
 
 def _submitted_event(item: ReviewItem) -> store.ResolverEvent:
@@ -156,7 +198,7 @@ def _submitted_event(item: ReviewItem) -> store.ResolverEvent:
         item.id,
         item.reference,
         item.status,
-        item.failed_checks,
+        _logged_checks(item),
         field=top.field if top else None,
         edit=top.edit if top else None,
         candidates=len(item.candidates),
@@ -183,14 +225,14 @@ def _check_shape(decision: str, rank: int | None) -> None:
 
 
 def _check_fits(item: ReviewItem, decision: str) -> None:
-    """Unresolvable items have nothing to accept or reject; the others have a
-    suggestion a person must accept or reject."""
-    if item.status == "unresolvable" and decision != "checked_manually":
+    """Unresolvable and cross-check items have nothing to accept or reject; the
+    others have a suggestion a person must accept or reject."""
+    if item.status in MANUAL_ONLY and decision != "checked_manually":
         raise ValueError(
-            f"{item.reference} is unresolvable: the only decision is checked_manually,"
+            f"{item.reference} is {item.status}: the only decision is checked_manually,"
             f" received {decision!r}"
         )
-    if item.status != "unresolvable" and decision == "checked_manually":
+    if item.status not in MANUAL_ONLY and decision == "checked_manually":
         raise ValueError(
             f"{item.reference} has candidates: the decision must be accepted or rejected"
         )
@@ -218,7 +260,7 @@ def decide(queue_id: str, decision: Decision, rank: int | None = None) -> Review
             item.id,
             item.reference,
             decision,
-            item.failed_checks,
+            _logged_checks(item),
             field=chosen.field if chosen else None,
             edit=chosen.edit if chosen else None,
             rank=chosen.rank if chosen else None,

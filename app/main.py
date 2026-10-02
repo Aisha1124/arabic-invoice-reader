@@ -24,8 +24,15 @@ from pydantic import BaseModel
 from app import review
 from app.extract import ParseError, extract, model_name
 from app.resolve import ARITHMETIC_RULES, resolve
-from app.schema import ExtractionResult, ExtractResponse, ReviewItem, ReviewOutcome
+from app.schema import (
+    CrossCheck,
+    ExtractionResult,
+    ExtractResponse,
+    ReviewItem,
+    ReviewOutcome,
+)
 from app.store import audit_row, read_last, write_audit
+from app.validate import CROSS_CHECK_RULES
 
 logger = logging.getLogger(__name__)
 
@@ -111,21 +118,36 @@ async def post_extract(request: Request) -> ExtractResponse:
     image_sha256 = hashlib.sha256(image).hexdigest()
     row = audit_row(image_sha256, result, metadata)
     write_audit(row)
+    # Every error finding reaches a person: arithmetic through the resolver,
+    # cross-checks as rule names and field paths only.
+    arithmetic = any(f.rule in RESOLVER_RULES for f in result.findings)
+    cross_checks = [
+        CrossCheck(rule=f.rule, fields=f.fields)
+        for f in result.findings
+        if f.rule in CROSS_CHECK_RULES
+    ]
     queued = None
-    if any(f.rule in RESOLVER_RULES for f in result.findings):
-        queued = _queue_for_review(row.id, image_sha256, result)
+    if arithmetic or cross_checks:
+        queued = _queue_for_review(
+            row.id, image_sha256, result, arithmetic, cross_checks
+        )
     return ExtractResponse(**dict(result), review=queued)
 
 
 def _queue_for_review(
-    audit_id: str, image_sha256: str, result: ExtractionResult
+    audit_id: str,
+    image_sha256: str,
+    result: ExtractionResult,
+    arithmetic: bool,
+    cross_checks: list[CrossCheck],
 ) -> ReviewOutcome:
     """A resolver or queue failure must not cost the user a successful extraction:
     the invoice is already needs_review, and the response says the review was not
     queued. Only the exception type is logged, since a message could quote an amount."""
     try:
+        resolution = resolve(result.invoice) if arithmetic else None
         item = review.submit(
-            audit_id, image_sha256, resolve(result.invoice), result.checks
+            audit_id, image_sha256, resolution, result.checks, cross_checks
         )
     except Exception as exc:  # noqa: BLE001 - deliberate: the extraction stands regardless
         logger.error(
@@ -133,7 +155,9 @@ def _queue_for_review(
         )
         return ReviewOutcome(status="error")
     return ReviewOutcome(
-        status="queued", reference=item.reference, resolver_status=item.status
+        status="queued",
+        reference=item.reference,
+        resolver_status=None if item.status == "cross_check" else item.status,
     )
 
 

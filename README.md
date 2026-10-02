@@ -1,8 +1,9 @@
 # Arabic/English Invoice Reader
 
 Reads an image of a Saudi tax invoice into structured fields with gpt-4o, checks
-the numbers against each other and against ZATCA field rules, and sends invoices
-whose arithmetic fails to a person for review; it never corrects a value itself.
+the numbers against each other, against the invoice's ZATCA QR code when it has
+one, and against ZATCA field rules, and sends invoices with a failed check to a
+person for review; it never corrects a value itself.
 
 ## The finding
 
@@ -63,27 +64,41 @@ every run with a wrong amount also failed an arithmetic check
   how they differ from what the model read, using the confusions above. If no
   single cell explains the failures, or two candidates are equally likely, it
   says so and suggests nothing.
+- **QR cross-check** (`app/qr.py`, zxing-cpp, no model). A ZATCA QR code
+  holds the seller name, seller VAT number, timestamp, total and VAT total.
+  The app decodes it from the same image and compares the VAT number,
+  date/time, total and VAT total with what the model read; each disagreement
+  is an error naming the field ("QR code says 2026-01-25 13:55, the model read
+  …"). A QR that cannot be found or decoded is reported as "QR not read",
+  never guessed. The QR is a strong signal, not proof.
 - **Review queue and page** (`app/review.py`, "Review queue" tab). Every
-  invoice whose arithmetic fails gets a short reference such as `R-0042` to
-  write on the paper invoice. A person accepts a candidate, rejects them all,
-  or marks an unresolvable invoice as checked manually. Nothing is ever
-  written back to the invoice: accepting only records the decision.
+  invoice with an error finding gets a short reference such as `R-0042` to
+  write on the paper invoice: failed arithmetic, a disagreement with the QR
+  code, or a date that does not match its timestamp. A person accepts a
+  candidate, rejects them all, or marks the invoice as checked manually (the
+  only choice when there is nothing to suggest). Nothing is ever written back
+  to the invoice: accepting only records the decision.
 
 ```
 POST /extract (raw PNG/JPEG body, ≤10 MB, in memory only)
   → app/extract.py   SHA-256 → .cache/ lookup → OpenAI vision call (temperature 0)
                      → digit/separator/currency normalisation → Invoice (Decimal money)
-  → app/validate.py  arithmetic rules (error) + ZATCA structural rules (warning)
+  → app/qr.py        the same bytes → zxing-cpp → ZATCA TLV tags 1-5, or "QR not read"
+  → app/validate.py  arithmetic and cross-check rules (error: QR disagreement, date vs
+                     timestamp) + ZATCA structural rules (warning)
   → app/store.py     one append-only audit row: hash, counts, rule names, tokens, latency
-  → if an arithmetic rule failed:
-      app/resolve.py which single cell explains the failed checks, and ranked candidates
-      app/review.py  review_queue row (amounts and field paths only) + reference R-0042
+  → if an error finding was raised:
+      app/resolve.py (arithmetic only) which single cell explains the failed checks
+      app/review.py  review_queue row + reference R-0042: amounts and field paths for
+                     arithmetic, rule names and field paths only for cross-checks
       app/store.py   append-only resolver event (no amounts)
   → JSON response (200 for both "ok" and "needs_review"), with `checks` (every arithmetic
     check: pass, fail or not checked and why, with the computed value and the
-    difference read − computed; the review queue keeps the outcome, not the amounts) and `review` (null, queued with its
-    reference, or error); the page draws these as the pipeline strip, the totals block
-    and the Checks column of the line-item table
+    difference read − computed; the review queue keeps the outcome, not the amounts),
+    `qr` (read, or not read and why; the QR values themselves are only in the
+    findings' messages) and `review` (null, queued with its reference, or error); the
+    page draws these as the pipeline strip, the totals block, the Checks column of the
+    line-item table and a Coverage column saying what each field was checked against
 
 GET  /reviews                       pending reviews
 POST /reviews/{id}/decision         accepted (with rank) | rejected | checked_manually
@@ -113,18 +128,40 @@ and is told to check every number on the invoice against the paper.
 The resolver's suggestions work only when a single cell is misread; that is
 proven by tests, not yet by real data.
 
+### QR cross-check on the same answers
+
+The generator draws a ZATCA QR only on simplified invoices that have a seller
+VAT number: **13 of the 30 samples, and 2 of the 6 Arabic-Indic ones**
+(INV-2026-1010 and 1012). zxing-cpp decoded all 13 to exactly the payload the
+generator wrote and found no QR on the other 17. Scored against ground truth on
+gpt-4o's cached answers (`python -m eval.run_eval`, "QR cross-check"; details in
+[`eval/results.md`](eval/results.md#qr-cross-check)):
+
+| Numerals | Header misreads | Caught by the QR | Missed | False alarms |
+|---|---|---|---|---|
+| Arabic-Indic (6 invoices) | 14 | 5 | 9 | 0 |
+| Latin (24 invoices, 11 with a QR) | 0 | 0 | 0 | 0 |
+
+All 5 catches are on INV-2026-1012: the date, time, seller VAT number, total and
+VAT total. Of the 9 misses, 7 are on invoices with no QR (1002, 1003, 1020) and
+2 are invoice numbers, which no ZATCA QR contains. On INV-2026-1003, read as
+"INV-2026-1002" with the date 2023-05-10, no check of any kind flags the number
+or the date: the invoice reaches review only because its arithmetic fails.
+
 ## Tests
 
-249 tests, all passing, all offline (no API calls). They include:
+372 tests, all passing, all offline (no API calls). They include:
 
 - nine invoices with one known confusion injected (٣→٢, ٨٤→٤٨, a dropped
   digit, …), one per kind of cell, each checked for the right cell and the
   right value ranked first;
 - invoices the resolver must refuse: two misread cells, a cell whose checks
   can't all be satisfied, a missing line-item table;
-- the review endpoints: decisions, the rule that an unresolvable invoice can
-  only be marked checked manually, repeat uploads, and that no names or VAT
-  numbers reach the queue.
+- the review endpoints: decisions, the rule that an unresolvable or
+  cross-check invoice can only be marked checked manually, repeat uploads, and
+  that no names or VAT numbers reach the queue or the logs, QR values included;
+- the QR decoder on a committed synthetic QR, malformed TLV payloads, and the
+  30 eval images (every QR read exactly, none found where there is none).
 
 To check the tests themselves, I broke the resolver four ways: ranking by whole
 numbers before confusion type, removing ambiguity detection, allowing only
@@ -133,6 +170,20 @@ whole-number quantities, and ignoring the confusion table. Each break made 1 or
 
 ## Limitations
 
+- **The QR covers few of these invoices.** On this set it exists on 13 of 30
+  invoices and 2 of 6 Arabic-Indic ones; the generator puts it only on
+  simplified invoices. The invoice number is in no ZATCA QR and is never
+  cross-checked, and the seller name is in the QR but deliberately not
+  compared (exact matching of Arabic names is brittle).
+- **QR time is compared as printed wall-clock time.** The QR's `Z` or offset
+  is dropped and the comparison is to the minute, because the page prints
+  `HH:MM` with no zone. This set's generator writes the printed time with `Z`.
+  A real invoice whose QR holds UTC while the page prints Saudi time (UTC+3)
+  would raise a false timestamp disagreement, and near midnight a false date
+  one.
+- **Warnings alone are not queued.** A compliance warning (say, a missing buyer
+  VAT number) sets the invoice to "needs review" but creates no review item:
+  only error findings are queued.
 - **Arithmetic catches the invoice, not every wrong cell.** Some misreads sit
   outside the failed checks because the wrong values still add up. On the five
   failing invoices above, 9 of 42 misread values were outside every failed
@@ -172,7 +223,7 @@ Python 3.11+.
 python3 -m venv .venv
 .venv/bin/pip install -r requirements.txt
 cp .env.example .env              # set OPENAI_API_KEY and OPENAI_MODEL
-.venv/bin/python -m pytest        # 249 passed here, with the sample images present
+.venv/bin/python -m pytest        # 372 passed here, with the sample images present
 ```
 
 The app does not read `.env` itself:

@@ -50,6 +50,7 @@ Fixed. Do not substitute.
 | Language | Python 3.11+ |
 | API | FastAPI |
 | Validation | Pydantic v2 |
+| QR decoding | zxing-cpp 3.1.1 (pip wheel, ~1 MB, no system libraries), with Pillow to open the image. No model. |
 | Model | OpenAI vision, model name from `OPENAI_MODEL` env var |
 | Storage | SQLite locally (`data/app.db`); Postgres via `DATABASE_URL` if set |
 | Tests | pytest |
@@ -71,7 +72,7 @@ arabic-invoice-reader/
 ├── .env.example
 ├── .gitignore
 ├── requirements.txt       # what the app runs
-├── requirements-eval.txt  # generator only (pillow, arabic-reshaper, python-bidi, qrcode)
+├── requirements-eval.txt  # generator only (arabic-reshaper, python-bidi, qrcode); pillow is in requirements.txt
 ├── ruff.toml          # excludes vendored eval/generate_invoices.py and *.md
 ├── app/
 │   ├── __init__.py
@@ -81,6 +82,7 @@ arabic-invoice-reader/
 │   ├── validate.py      # business rules, confidence gating
 │   ├── store.py         # database + audit log
 │   ├── cache.py         # SHA-256 response cache
+│   ├── qr.py            # ZATCA QR: zxing-cpp decode + TLV tags 1-5 (no model call)
 │   ├── resolve.py       # arithmetic resolver: localise, suggest, rank (no model call)
 │   └── review.py        # review queue: a person accepts or rejects each suggestion
 ├── static/
@@ -100,11 +102,12 @@ arabic-invoice-reader/
 │   └── coru/                  # CORU numeral-reading evidence: scores only, no images or text
 ├── tests/
 │   ├── __init__.py      # makes the repo root importable under pytest
-│   ├── fixtures/        # recorded model responses
+│   ├── fixtures/        # recorded model responses; zatca_qr.png, a synthetic ZATCA QR
 │   ├── test_schema.py
 │   ├── test_validate.py
 │   ├── test_extract.py
 │   ├── test_cache.py
+│   ├── test_qr.py
 │   ├── test_resolve.py
 │   ├── test_review.py
 │   ├── test_main.py     # HTTP endpoints, via FastAPI's TestClient (httpx)
@@ -180,6 +183,17 @@ class FieldConfidence(BaseModel):
 - If every line shares one lumped VAT figure rather than per-line VAT, flag it. This is the second most common rejection.
 - Simplified invoices: seller name, timestamp, total, and VAT amount must all be present. With the seller VAT number above, these are the five TLV QR fields.
 
+**QR cross-check**
+
+`app/qr.py` decodes the invoice's ZATCA QR from the same image bytes, with no model: base64 TLV tags 1 seller name, 2 seller VAT number, 3 timestamp, 4 total incl. VAT, 5 VAT total. Anything short of exactly one QR with all five tags well formed is "QR not read" with the reason; nothing is guessed. When it is read, each disagreement is a finding of severity `"error"` (one side was misread), naming the field in question:
+- `seller_vat_number_matches_qr`: exact string match.
+- `timestamp_matches_qr`: the QR's wall-clock time, zone dropped, to the minute, against `invoice_timestamp` and `invoice_date`; the fields named are those that disagree.
+- `total_matches_qr`, `vat_total_matches_qr`: within 0.01.
+- A value the model read as null disagrees with the QR. The seller name is not compared, and the invoice number is in no ZATCA QR.
+- Messages say "QR code says X, the model read Y", never "correct value". The QR is a strong signal, not proof.
+
+These four and `invoice_date_matches_timestamp` are `CROSS_CHECK_RULES`: errors that are not arithmetic. `/extract` queues them for review as rule names and field paths only, with "checked manually" the only decision unless the resolver also has arithmetic to work on.
+
 **Confidence scores**
 - The prompt asks for a per-field confidence score and `FieldConfidence` records it. Nothing gates on it. The threshold gate was removed after being measured as inversely calibrated on this project's eval set: over 102 scored fields on three samples, mean confidence was 0.977 on correct fields and 1.000 on incorrect ones, all 15 wrong values scored 1.0, and the only sub-threshold scores were on two correctly-null fields (false alarms). See `eval/README.md` "Findings". Arithmetic validation caught every one of those misreads.
 - The scores stay in the output and `eval/run_eval.py` keeps the calibration metric, so the finding remains reproducible. `CONFIDENCE_THRESHOLD` (default 0.80, from env) is used only by that report.
@@ -191,7 +205,7 @@ class FieldConfidence(BaseModel):
 
 Every finding carries `severity: "error" | "warning"`.
 
-- `"error"`: any arithmetic check that fails. The numbers do not add up, so the extraction is wrong. Forces `needs_review = true` on the fields involved.
+- `"error"`: any arithmetic check that fails. The numbers do not add up, so the extraction is wrong. Forces `needs_review = true` on the fields involved. Also the cross-checks above: two readings that should agree do not, so one of them is wrong.
 - `"warning"`: ZATCA structural checks. The extraction may be correct and the invoice itself is non-compliant. Flagged for the reviewer, but does not by itself mean the extraction failed.
 
 These are different failures. An arithmetic error means we read the invoice wrong. A structural finding means we read it right and the invoice has a compliance problem. Conflating them would make the eval numbers meaningless — we could not tell extraction failures from real ZATCA defects in the source documents.
@@ -215,7 +229,7 @@ Every extraction writes one immutable row. Append-only. No updates, no deletes.
 | `latency_ms` | duration |
 | `estimated_cost_usd` | spend |
 
-**Resolver log.** `store.py` also holds `resolver_events`, append-only like the audit log: one row per resolver outcome (`suggested`, `ambiguous`, `unresolvable`) and per review decision (`accepted`, `rejected`, `checked_manually`), with the audit row id, the review reference (`R-0042`), failed check names, the top or accepted field path, its confusion type and rank, and the candidate count. Never amounts. The amounts a reviewer needs live in `review.py`'s `review_queue`, which is the only table rows are ever removed from (see section 9).
+**Resolver log.** `store.py` also holds `resolver_events`, append-only like the audit log: one row per resolver outcome (`suggested`, `ambiguous`, `unresolvable`, or `cross_check` for an item queued for a cross-check alone) and per review decision (`accepted`, `rejected`, `checked_manually`), with the audit row id, the review reference (`R-0042`), failed check and cross-check rule names, the top or accepted field path, its confusion type and rank, and the candidate count. Never amounts. The amounts a reviewer needs live in `review.py`'s `review_queue`, which is the only table rows are ever removed from (see section 9).
 
 **Never write invoice content, names, VAT numbers, or images into the audit log.** The log records that an extraction happened and how it went, not what was in it. This is the PDPL-safe design and it is the point.
 
@@ -226,7 +240,7 @@ Every extraction writes one immutable row. Append-only. No updates, no deletes.
 ## 9. Privacy rules
 
 - Uploaded images are processed in memory and discarded. Never written to disk outside `.cache/` (hash-keyed, gitignored).
-- `review_queue` (in `data/app.db`) stores amounts and field paths for a pending review: the values read in the failed checks and the candidate values, plus a short reference (`R-0042`) the user writes on the paper invoice, and the outcome of each arithmetic check (`{rule, line, outcome, reason}`: positions and pass/fail/not-checked, no amounts) for the review detail's issues list. Never names, VAT numbers, descriptions or images. `GET /reviews` returns these amounts and the app has no authentication: anyone who can reach the server can read the queue. The row is removed in the same transaction that logs the decision, so amounts leave the database once a person has decided. Undecided rows stay until then.
+- `review_queue` (in `data/app.db`) stores amounts and field paths for a pending review: the values read in the failed checks and the candidate values, plus a short reference (`R-0042`) the user writes on the paper invoice, and the outcome of each arithmetic check (`{rule, line, outcome, reason}`: positions and pass/fail/not-checked, no amounts) for the review detail's issues list, and each failed cross-check as `{rule, fields}`: rule name and field paths, never the values on either side. Never names, VAT numbers, descriptions or images. Decoded QR content follows the extracted fields' rules: it is returned in the response (inside finding messages), never logged, never queued. `GET /reviews` returns these amounts and the app has no authentication: anyone who can reach the server can read the queue. The row is removed in the same transaction that logs the decision, so amounts leave the database once a person has decided. Undecided rows stay until then.
 - `.cache/` and `data/` are in `.gitignore`. No sample invoice with real data ever enters git.
 - Use only the PII-redacted variants of public datasets.
 - `docs/data-flow.md` states plainly: what is sent to OpenAI, what is stored, what is not stored, where it is hosted, and how deletion works. Write what the code actually does. If the code does not implement deletion, the document says so.
@@ -289,6 +303,9 @@ Never: silently simplify the task, fake a result, stub something and describe it
 - The resolver assumes one misread cell. Two or more misreads usually match no single cell's checks and come back `unresolvable`; it does not try pairs. Candidates are non-negative, amounts at 2 decimals, quantities at up to 3.
 - The resolver's confusion table (`app/resolve.py`) comes from gpt-4o on 29 CORU receipt lines, one model, two prompt versions. It orders candidates; it is not an error rate and has not been measured on this project's invoices or any other model.
 - Accepting a suggestion records the decision; nothing applies the value to an invoice.
+- The ZATCA QR exists on 13 of the 30 eval samples and 2 of the 6 Arabic-Indic ones: the generator draws it only on simplified invoices with a seller VAT number. On gpt-4o's cached answers it caught 5 of 14 Arabic-Indic header misreads (all on INV-2026-1012) with 0 false alarms; 7 misses had no QR and 2 were invoice numbers, which no QR holds. See `eval/results.md` "QR cross-check".
+- The QR timestamp is compared as printed wall-clock time with its `Z` or offset dropped. Real invoices whose QR holds UTC while the page prints Saudi time (UTC+3) would raise false timestamp disagreements, and near midnight false date ones.
+- Only error findings are queued for review. An invoice with warnings alone is `needs_review` but creates no review item.
 - On real gpt-4o output the one-misread assumption rarely holds for Arabic-Indic invoices. Run on the cached answers for the 6 Arabic-Indic eval samples (2026-09-30): 5 failed arithmetic, and all 5 came back `unresolvable`, with 4 to 11 misread cells each. The resolver said so instead of guessing, and the reviewer gets the values involved, but it suggested nothing. Its suggestions are proven only on single injected misreads (`tests/test_resolve.py`).
 - `/extract` runs the resolver after the audit row is written, only when a finding is an arithmetic rule. A resolver or queue failure is logged by exception type and does not fail the extraction. Re-uploading an image that already has a pending review queues nothing new. The response's `review` field says which happened: `null` (nothing to resolve), `queued` with the reference and resolver status (the existing item's on a re-upload), or `error`.
 - The review queue's `checks` column was added after the queue existed. `app/review.py` adds it with `ALTER TABLE` when missing; rows queued before then have `checks = null` and their review detail lists the failed checks from the resolver's stored labels instead.

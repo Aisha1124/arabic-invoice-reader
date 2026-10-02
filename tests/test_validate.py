@@ -6,7 +6,14 @@ from pathlib import Path
 import pytest
 
 from app import validate as validate_module
-from app.schema import CheckOutcome, ExtractionResult, Finding, Invoice, LineItem
+from app.schema import (
+    CheckOutcome,
+    ExtractionResult,
+    Finding,
+    Invoice,
+    LineItem,
+    QrPayload,
+)
 from app.validate import validate
 
 SELLER_VAT = "300000000000003"
@@ -666,6 +673,7 @@ def test_every_rule_in_validate_is_tripped_by_a_broken_invoice() -> None:
         for invoice in (_broken_standard(), _broken_simplified(), _broken_lumped_vat())
         for f in _run(invoice).findings
     }
+    tripped |= {f.rule for f in validate(_invoice(), {}, _qr_disagreeing()).findings}
 
     assert declared, "no rule= literals found in validate.py"
     assert declared == tripped
@@ -853,3 +861,130 @@ def test_computed_values_are_exact_decimals() -> None:
     vat = _check(result, LINE_VAT, 0)
     assert vat.computed == Decimal("40.29") * Decimal("0.15")
     assert isinstance(vat.computed, Decimal)
+
+
+# --- QR cross-check: the invoice's ZATCA QR against what the model read ---------------
+
+QR_RULES = {
+    "seller_vat_number_matches_qr",
+    "timestamp_matches_qr",
+    "total_matches_qr",
+    "vat_total_matches_qr",
+}
+
+
+def _qr(**overrides: object) -> QrPayload:
+    """What the QR of _invoice() holds: 287.50 total, 37.50 VAT, 10:30 wall clock."""
+    values: dict[str, object] = {
+        "seller_name": "Seller",
+        "seller_vat_number": SELLER_VAT,
+        "timestamp": datetime(2026, 1, 15, 10, 30),  # noqa: DTZ001
+        "total": Decimal("287.50"),
+        "vat_total": Decimal("37.50"),
+    }
+    values.update(overrides)
+    return QrPayload(**values)
+
+
+def _qr_disagreeing() -> QrPayload:
+    return _qr(
+        seller_vat_number="300000000000099",
+        timestamp=datetime(2026, 6, 16, 14, 23),  # noqa: DTZ001
+        total=Decimal("1287.50"),
+        vat_total=Decimal("137.50"),
+    )
+
+
+def _qr_findings(invoice: Invoice, qr: QrPayload | str) -> list[Finding]:
+    return [f for f in validate(invoice, {}, qr).findings if f.rule in QR_RULES]
+
+
+def test_qr_that_agrees_raises_nothing_and_reports_it_was_read() -> None:
+    result = validate(_invoice(), {}, _qr())
+
+    assert result.findings == []
+    assert (result.qr.status, result.qr.reason) == ("read", None)
+
+
+def test_each_disagreement_is_an_error_naming_the_field_in_question() -> None:
+    findings = {f.rule: f for f in _qr_findings(_invoice(), _qr_disagreeing())}
+
+    assert set(findings) == QR_RULES
+    assert {f.severity for f in findings.values()} == {"error"}
+    assert findings["seller_vat_number_matches_qr"].fields == ["seller_vat_number"]
+    assert findings["timestamp_matches_qr"].fields == [
+        "invoice_timestamp",
+        "invoice_date",
+    ]
+    assert findings["total_matches_qr"].fields == ["total"]
+    assert findings["vat_total_matches_qr"].fields == ["vat_total"]
+
+
+def test_disagreement_messages_say_what_the_qr_code_says_and_what_was_read() -> None:
+    invoice = _invoice()
+    findings = {f.rule: f.message for f in _qr_findings(invoice, _qr_disagreeing())}
+
+    assert findings["seller_vat_number_matches_qr"] == (
+        f"QR code says 300000000000099, the model read {SELLER_VAT}"
+    )
+    assert findings["timestamp_matches_qr"] == (
+        "QR code says 2026-06-16 14:23, the model read"
+        " timestamp 2026-01-15 10:30 and date 2026-01-15"
+    )
+    assert findings["total_matches_qr"] == (
+        f"QR code says 1287.50, the model read {invoice.total}"
+    )
+    assert findings["vat_total_matches_qr"] == (
+        f"QR code says 137.50, the model read {invoice.vat_total}"
+    )
+    for message in findings.values():
+        assert "correct" not in message.lower()
+
+
+def test_a_value_the_model_did_not_read_disagrees_with_the_qr() -> None:
+    (finding,) = _qr_findings(_invoice(seller_vat_number=None), _qr())
+
+    assert finding.rule == "seller_vat_number_matches_qr"
+    assert finding.message == f"QR code says {SELLER_VAT}, the model read nothing"
+
+
+def test_only_the_date_disagreeing_names_only_the_date() -> None:
+    (finding,) = _qr_findings(_invoice(invoice_date=date(2023, 1, 15)), _qr())
+
+    assert finding.fields == ["invoice_date"]
+    assert finding.message == (
+        "QR code says 2026-01-15 10:30, the model read date 2023-01-15"
+    )
+
+
+def test_seconds_and_zone_do_not_count_as_a_timestamp_disagreement() -> None:
+    """The page prints HH:MM with no zone, so the comparison is to the minute."""
+    read = datetime(2026, 1, 15, 10, 30, 0, tzinfo=timezone(timedelta(hours=3)))
+    qr = _qr(timestamp=datetime(2026, 1, 15, 10, 30, 41))  # noqa: DTZ001
+
+    assert _qr_findings(_invoice(invoice_timestamp=read), qr) == []
+
+
+def test_amounts_within_tolerance_agree() -> None:
+    qr = _qr(total=Decimal("287.51"), vat_total=Decimal("37.49"))
+    assert _qr_findings(_invoice(), qr) == []
+
+
+def test_qr_not_read_raises_no_qr_finding_and_says_why() -> None:
+    result = validate(_invoice(seller_vat_number=None), {}, "no QR code found")
+
+    assert [f for f in result.findings if f.rule in QR_RULES] == []
+    assert (result.qr.status, result.qr.reason) == ("not_read", "no QR code found")
+
+
+def test_validate_without_an_image_says_no_qr_was_looked_for() -> None:
+    result = validate(_invoice(), {})
+
+    assert result.qr.status == "not_read"
+    assert result.qr.reason == "no image was scanned for a QR code"
+
+
+def test_cross_check_rules_are_the_qr_rules_and_the_date_timestamp_rule() -> None:
+    assert validate_module.CROSS_CHECK_RULES == QR_RULES | {
+        "invoice_date_matches_timestamp"
+    }

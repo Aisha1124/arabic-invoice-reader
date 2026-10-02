@@ -29,6 +29,7 @@ from typing import Any
 from app import cache
 from app.extract import PROMPT_VERSION, ParseError, extract, model_name
 from app.schema import CallMetadata, Invoice, LineItem
+from app.validate import QR_RULES
 from eval.load_data import (
     EVAL_DIR,
     GOLDEN_LINE_FIELDS,
@@ -51,6 +52,17 @@ COST_UNKNOWN = (
     "unknown (set OPENAI_PRICE_INPUT_PER_1M_USD and OPENAI_PRICE_OUTPUT_PER_1M_USD)"
 )
 GOLDEN_GROUPS = ("all", "latin", "arabic_indic")
+# Header fields scored for the QR cross-check. The invoice number is in no ZATCA QR,
+# so it is listed to show that its misreads are always missed.
+QR_SCORED = (
+    "invoice_number",
+    "invoice_date",
+    "invoice_timestamp",
+    "seller_vat_number",
+    "total",
+    "vat_total",
+)
+QR_FIELDS = frozenset(QR_SCORED[1:])
 
 
 @dataclass
@@ -59,6 +71,8 @@ class Run:
     fields: dict[str, Any] | None  # None when the response could not be parsed
     rules: list[str] = field(default_factory=list)
     confidences: dict[str, float] = field(default_factory=dict)
+    qr_read: bool = False
+    qr_flagged: list[str] = field(default_factory=list)  # fields a QR finding names
 
 
 def flatten(invoice: Invoice) -> dict[str, Any]:
@@ -90,6 +104,10 @@ def _extract_once(image: bytes, file: str, use_cache: bool) -> Run:
         fields=flatten(result.invoice),
         rules=[f.rule for f in result.findings],
         confidences={c.field: c.confidence for c in result.confidences},
+        qr_read=result.qr.status == "read",
+        qr_flagged=sorted(
+            {path for f in result.findings if f.rule in QR_RULES for path in f.fields}
+        ),
     )
 
 
@@ -123,6 +141,59 @@ def agreement(
             values = [str(o.get(path)) if o is not None else None for o in outputs]
             same.setdefault(_group(path), []).append(len(set(values)) == 1)
     return same
+
+
+def qr_outcome(sample: Sample, run: Run, path: str) -> str | None:
+    """What the QR cross-check did about one header field; None when the field was
+    read right and nothing was raised."""
+    misread = run.fields.get(path) != flatten(sample.invoice)[path]
+    flagged = path in run.qr_flagged
+    if not misread:
+        return "false alarm" if flagged else None
+    if flagged:
+        return "caught"
+    if path not in QR_FIELDS:
+        return "missed: not in the QR"
+    if sample.meta.qr_base64 is None:
+        return "missed: no QR on the invoice"
+    if not run.qr_read:
+        return "missed: QR not read"
+    return "missed: QR read but raised nothing"
+
+
+def qr_report(samples: list[Sample], runs: dict[str, list[Run]]) -> list[str]:
+    out = ["QR cross-check, header fields against ground truth:"]
+    for group in ("arabic_indic", "latin"):
+        subset = [s for s in samples if s.meta.numerals == group]
+        if subset:
+            out += _qr_group(group, subset, runs)
+    return out
+
+
+def _qr_group(
+    group: str, subset: list[Sample], runs: dict[str, list[Run]]
+) -> list[str]:
+    details: list[str] = []
+    counts: Counter[str] = Counter()
+    for sample in subset:
+        for run in runs[sample.meta.file]:
+            if run.fields is None:
+                continue
+            for path in QR_SCORED:
+                outcome = qr_outcome(sample, run, path)
+                if outcome is not None:
+                    counts[outcome.split(":")[0]] += 1
+                    details.append(f"    {sample.meta.file}  {path}: {outcome}")
+    group_runs = [r for s in subset for r in runs[s.meta.file]]
+    with_qr = sum(s.meta.qr_base64 is not None for s in subset)
+    misreads = counts["caught"] + counts["missed"]
+    summary = (
+        f"  {group}: QR on {with_qr} of {len(subset)} invoices,"
+        f" read in {sum(r.qr_read for r in group_runs)} of {len(group_runs)} runs;"
+        f" {misreads} header misreads, {counts['caught']} caught,"
+        f" {counts['missed']} missed, {counts['false alarm']} false alarms"
+    )
+    return [summary, *details]
 
 
 def defect_catch(samples: list[Sample], runs: dict[str, list[Run]]) -> list[str]:
@@ -268,6 +339,7 @@ def report(samples: list[Sample], runs: dict[str, list[Run]], repeats: int) -> s
         f"seeded defects caught ({len(all_runs)} runs):",
         *defect_catch(samples, runs),
     ]
+    out += ["", *qr_report(samples, runs)]
     out += ["", *calibration(samples, runs, confidence_threshold())]
     out += ["", *_summary(samples, all_runs, repeats)]
     return "\n".join(out)

@@ -137,6 +137,10 @@
   .issue summary { cursor: pointer; inline-size: fit-content; }
   .issue .rule { display: block; margin-block-start: var(--s1); font-size: 12px; }
   .issue .msg { margin: var(--s1) 0 0; overflow-wrap: anywhere; }
+  .issue .quote { margin: var(--s1) 0 0; font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
+  td.coverage { font-size: 13px; color: var(--muted); min-inline-size: 8em; }
+  #totals th.key { min-inline-size: 9em; }
+  .tocheck { margin: 0; padding-inline-start: var(--s5); font-weight: 500; }
   .issues .none { color: var(--muted); }
   .located { outline: 3px solid var(--queued); outline-offset: -3px; }
   .none { color: var(--muted); }
@@ -281,6 +285,7 @@
     </div>
     <div class="stripline">
       <ol class="pipeline" id="pipeline" aria-label="Pipeline"></ol>
+      <span class="stage" id="qr-summary"></span>
       <p class="run-details" id="run-details"></p>
     </div>
   </div>
@@ -318,7 +323,7 @@
       <section class="block scroll">
         <table id="totals">
           <thead><tr>
-            <th></th><th class="num">Read</th><th class="num">Computed</th><th class="num">Difference</th><th>Status</th>
+            <th></th><th class="num">Read</th><th class="num">Computed</th><th class="num">Difference</th><th>Status</th><th>Coverage</th>
           </tr></thead>
           <tbody></tbody>
         </table>
@@ -338,7 +343,10 @@
 
       <h2>Invoice fields</h2>
       <section class="block">
-        <table><tbody id="header"></tbody></table>
+        <table>
+          <thead><tr><th>Field</th><th>Read</th><th>Coverage</th></tr></thead>
+          <tbody id="header"></tbody>
+        </table>
         <button class="btn" type="button" id="show-fields" aria-controls="header" aria-expanded="false">Show all fields</button>
       </section>
     </div>
@@ -346,7 +354,7 @@
   </div>
 
   <div id="view-review" role="tabpanel" hidden>
-    <p class="review-note">Invoices whose numbers did not add up. The image is not stored: find the paper invoice by its reference and check the values against it. A decision is recorded; it does not change any extracted value. Keys: ↑ ↓ move through the list, A accept, M checked manually, R reject.</p>
+    <p class="review-note">Invoices with a failed check: numbers that do not add up, or fields that disagree with the QR code or with each other. The image is not stored: find the paper invoice by its reference and check the values against it. A decision is recorded; it does not change any extracted value. Keys: ↑ ↓ move through the list, A accept, M checked manually, R reject.</p>
     <p class="review-status" id="review-status" role="status"></p>
     <div class="queue" id="queue">
       <nav class="inbox" aria-label="Pending reviews"><ol id="inbox"></ol></nav>
@@ -382,7 +390,13 @@ const RULE_SENTENCES = {
   standard_invoice_has_buyer_vat_number: () => "A standard invoice needs the buyer's VAT number, and it is missing",
   vat_is_itemised_per_line: () => "VAT is not itemised per line, as ZATCA requires",
   simplified_invoice_has_qr_fields: () => "A simplified invoice is missing fields its QR code needs",
+  seller_vat_number_matches_qr: () => "The seller's VAT number disagrees with the QR code",
+  timestamp_matches_qr: () => "The invoice date or time disagrees with the QR code",
+  total_matches_qr: () => "The total disagrees with the QR code",
+  vat_total_matches_qr: () => "The VAT total disagrees with the QR code",
 };
+// The QR cross-check rules: their finding quotes what the QR code says and what was read.
+const QR_RULES = new Set(["seller_vat_number_matches_qr", "timestamp_matches_qr", "total_matches_qr", "vat_total_matches_qr"]);
 // The resolver names checks by label; each maps to the rule that raises the same check.
 const CHECK_RULES = [
   [/^line_items\[(\d+)\]: quantity × unit_price = line_total$/, "line_total_equals_quantity_times_unit_price"],
@@ -399,7 +413,10 @@ const EDITS = {
   other_substitution: "one digit changed, not a confusion we have seen",
   other: "several digits differ",
 };
-const FIELD_NAMES = { subtotal: "Subtotal", vat_total: "VAT total", total: "Total" };
+const FIELD_NAMES = {
+  subtotal: "Subtotal", vat_total: "VAT total", total: "Total", seller_vat_number: "Seller VAT number",
+  invoice_date: "Invoice date", invoice_timestamp: "Timestamp",
+};
 
 function lineNumber(fields) {
   for (const field of fields) {
@@ -447,9 +464,9 @@ function pipelineStages(result) {
     resolve = ["failed", "Resolver error"];
     queue = ["failed", "Not queued"];
   } else {
-    resolve = review.resolver_status === "suggested"
-      ? ["passed", "Suggested a value"]
-      : ["failed", review.resolver_status === "ambiguous" ? "Ambiguous" : "Unresolvable"];
+    resolve = review.resolver_status === null ? ["not_needed", "No arithmetic failure"]
+      : review.resolver_status === "suggested" ? ["passed", "Suggested a value"]
+        : ["failed", review.resolver_status === "ambiguous" ? "Ambiguous" : "Unresolvable"];
     queue = ["queued", `Queued as ${review.reference}`];
   }
   return [["Read", ["passed", "Extracted"]], ["Check", check], ["Resolve", resolve], ["Review", queue]]
@@ -512,6 +529,7 @@ function issuesFromFindings(findings, checks) {
       sentence: plainFinding(f.rule, f.fields),
       rule: f.rule,
       message: f.message,
+      quote: QR_RULES.has(f.rule) ? f.message : null,
       computed: check ? `Computed ${check.computed} · difference ${signed(check.difference)}` : null,
       target: checkCell(f.rule, line) || f.fields.find((x) => x !== "line_items") || null,
     };
@@ -522,15 +540,24 @@ function issuesFromFindings(findings, checks) {
 // were stored have only the resolver's labels.
 function issuesFromChecks(checks, labels) {
   if (checks === null) {
-    return labels.map((label) => ({ severity: "error", sentence: plainCheck(label), rule: label, message: null, computed: null, target: null }));
+    return labels.map((label) => ({ severity: "error", sentence: plainCheck(label), rule: label, message: null, quote: null, computed: null, target: null }));
   }
   return checks.filter((c) => c.outcome === "fail").map((c) => ({
     severity: "error",
     sentence: RULE_SENTENCES[c.rule](c.line === null ? null : c.line + 1),
     rule: c.rule,
     message: null,
+    quote: null,
     computed: null,
     target: checkCell(c.rule, c.line),
+  }));
+}
+
+// A review item's failed cross-checks: rule names and field paths, no values.
+function issuesFromCrossChecks(crossChecks) {
+  return crossChecks.map((c) => ({
+    severity: "error", sentence: RULE_SENTENCES[c.rule](null), rule: c.rule,
+    message: null, quote: null, computed: null, target: c.fields[0],
   }));
 }
 
@@ -542,6 +569,10 @@ function resolverPanel(review, item) {
   if (review.status === "error") {
     return { tone: "failed", title: "The resolver failed", candidates: [],
       text: "Nothing was queued. The issues above still stand: check the invoice against the paper." };
+  }
+  if (item && item.status === "cross_check") {
+    return { tone: "neutral", title: "Nothing for the resolver to suggest", candidates: [],
+      text: "Fields disagree with the QR code or with each other. The resolver only works on arithmetic: check those fields against the paper invoice. The QR code is a strong signal, not proof." };
   }
   if (!item) {
     return { tone: "neutral", title: `${review.reference} is no longer pending`, candidates: [],
@@ -636,16 +667,18 @@ function flaggedFields(findings, keys) {
 }
 
 // Which decisions fit an item; app/review.py refuses the others.
+const MANUAL_ONLY = new Set(["unresolvable", "cross_check"]);
 const DECISIONS = {
-  accept: (item) => item.status !== "unresolvable",
-  checked_manually: (item) => item.status === "unresolvable",
-  reject: (item) => item.status !== "unresolvable",
+  accept: (item) => !MANUAL_ONLY.has(item.status),
+  checked_manually: (item) => MANUAL_ONLY.has(item.status),
+  reject: (item) => !MANUAL_ONLY.has(item.status),
 };
-const STATUS_WORDS = { suggested: "Suggestion", ambiguous: "Ambiguous", unresolvable: "Unresolvable" };
+const STATUS_WORDS = { suggested: "Suggestion", ambiguous: "Ambiguous", unresolvable: "Unresolvable", cross_check: "Cross-check" };
 
 function inboxEntry(item) {
+  const failed = item.failed_checks.length + (item.cross_checks || []).length;
   return { reference: item.reference, status: item.status, word: STATUS_WORDS[item.status],
-    summary: plural(item.failed_checks.length, "failed check") };
+    summary: plural(failed, "failed check") };
 }
 
 // The review detail: the same issues and resolver wording as the extract screen, and
@@ -656,7 +689,8 @@ function reviewDetail(item) {
   return {
     heading: `Find paper invoice ${item.reference}`,
     tone: panel.tone, title: panel.title, text: panel.text,
-    issues: issuesFromChecks(item.checks, item.failed_checks),
+    issues: [...issuesFromChecks(item.checks, item.failed_checks), ...issuesFromCrossChecks(item.cross_checks || [])],
+    fieldsToCheck: [...new Set((item.cross_checks || []).flatMap((c) => c.fields))].map(plainField),
     candidates: panel.candidates,
     readings: item.status === "unresolvable"
       ? item.involved.map((r) => ({ field: plainField(r.field), value: r.read_value, arabic: arabicIndic(r.read_value) }))
@@ -675,6 +709,30 @@ function shortcut(key) {
 function decisionBody(action, rank) {
   if (action === "accept") return { decision: "accepted", rank };
   return { decision: action === "reject" ? "rejected" : "checked_manually" };
+}
+
+// What each field was checked against. A check that did not run checks nothing;
+// the invoice number is in no QR and no sum, so it is never cross-checked.
+const QR_FIELDS = new Set(["seller_vat_number", "invoice_date", "invoice_timestamp", "total", "vat_total"]);
+const ARITHMETIC_FIELDS = {
+  subtotal_equals_sum_of_line_totals: ["subtotal"],
+  vat_total_equals_sum_of_vat_amounts: ["vat_total"],
+  total_equals_subtotal_plus_vat_total: ["subtotal", "vat_total", "total"],
+};
+
+function fieldCoverage(field, qr, checks) {
+  const byQr = qr.status === "read" && QR_FIELDS.has(field);
+  const byArithmetic = checks.some((c) => c.outcome !== "not_checked" && (ARITHMETIC_FIELDS[c.rule] || []).includes(field));
+  if (byQr && byArithmetic) return "Checked by QR and arithmetic";
+  if (byQr) return "Checked by QR";
+  return byArithmetic ? "Checked by arithmetic" : "Not cross-checked";
+}
+
+function qrSummary(qr, findings) {
+  if (qr.status !== "read") return { state: "not_needed", text: `QR not read: ${qr.reason}` };
+  const fields = new Set(findings.filter((f) => QR_RULES.has(f.rule)).flatMap((f) => f.fields)).size;
+  if (fields === 0) return { state: "passed", text: "QR code read; it agrees with what the model read" };
+  return { state: "failed", text: `QR code read; ${fields === 1 ? "1 field disagrees" : `${fields} fields disagree`} with it` };
 }
 
 function arabicIndic(value) {
@@ -810,6 +868,10 @@ function renderVerdict(result, audit) {
     strip.append(li);
   }
   setText("run-details", runDetails(audit));
+  const qr = qrSummary(result.qr, result.findings);
+  const qrChip = document.getElementById("qr-summary");
+  qrChip.className = `stage ${qr.state}`;
+  qrChip.replaceChildren(icon(STATE_ICONS[qr.state]), qr.text);
 }
 
 // The result on screen, kept so "Show all fields" can redraw the field table.
@@ -820,9 +882,9 @@ function render(result, audit) {
   current = result;
   showAllFields = false;
   renderVerdict(result, audit);
-  renderTotals(result.invoice, result.checks);
+  renderTotals(result);
   renderLines(result.invoice.line_items, result.checks);
-  renderFields(result.invoice, result.findings);
+  renderFields(result);
   // After the tables, so each "Show in table" link can check its cell exists.
   document.getElementById("issues").replaceChildren(issuesList(issuesFromFindings(result.findings, result.checks), "cell-"));
   document.getElementById("result").hidden = false;
@@ -837,13 +899,16 @@ function statusChip(state, text) {
   return chip;
 }
 
-function renderTotals(inv, checks) {
+// A total's read cell is red when its own sum fails or the QR code disagrees with it.
+function renderTotals(result) {
   const body = document.querySelector("#totals tbody");
   body.replaceChildren();
-  for (const r of totalsRows(inv, checks)) {
+  const qrFlagged = new Set(result.findings.filter((f) => QR_RULES.has(f.rule)).flatMap((f) => f.fields));
+  for (const r of totalsRows(result.invoice, result.checks)) {
     const th = el("th", "key", r.label);
     th.append(el("span", "formula", `Computed: ${r.formula}`));
-    const read = valueCell(r.read, r.outcome === "fail" ? "error" : null, true, `cell-${r.field}`);
+    const failed = r.outcome === "fail" || qrFlagged.has(r.field);
+    const read = valueCell(r.read, failed ? "error" : null, true, `cell-${r.field}`);
     const computed = el("td", "num");
     computed.append(ltr("", r.computed ?? "—"));
     const difference = el("td", "num");
@@ -852,7 +917,7 @@ function renderTotals(inv, checks) {
     status.append(statusChip(OUTCOME_STATE[r.outcome], OUTCOME_TEXT[r.outcome]));
     if (r.reason) status.append(el("span", "reason", r.reason));
     const row = el("tr");
-    row.append(th, read, computed, difference, status);
+    row.append(th, read, computed, difference, status, el("td", "coverage", fieldCoverage(r.field, result.qr, result.checks)));
     body.append(row);
   }
 }
@@ -881,14 +946,17 @@ function renderLines(items, checks) {
 }
 
 // Only fields named in a finding, unless the person asks for all of them.
-function renderFields(inv, findings) {
-  const flagged = flaggedFields(findings, HEADER_FIELDS.map(([key]) => key));
+function renderFields(result) {
+  const inv = result.invoice;
+  const flagged = flaggedFields(result.findings, HEADER_FIELDS.map(([key]) => key));
   const body = document.getElementById("header");
   body.replaceChildren();
   const shown = HEADER_FIELDS.filter(([key]) => showAllFields || key in flagged);
   if (shown.length === 0) {
     const row = el("tr");
-    row.append(el("td", "none", "No invoice field is in a finding."));
+    const td = el("td", "none", "No invoice field is in a finding.");
+    td.colSpan = 3;
+    row.append(td);
     body.append(row);
   }
   for (const [key, label, numeric] of shown) {
@@ -898,7 +966,8 @@ function renderFields(inv, findings) {
       th.append(statusChip(state, word));
     }
     const row = el("tr");
-    row.append(th, valueCell(inv[key], flagged[key] ?? null, numeric, `cell-${key}`));
+    row.append(th, valueCell(inv[key], flagged[key] ?? null, numeric, `cell-${key}`),
+      el("td", "coverage", fieldCoverage(key, result.qr, result.checks)));
     body.append(row);
   }
   const toggle = document.getElementById("show-fields");
@@ -908,7 +977,7 @@ function renderFields(inv, findings) {
 
 document.getElementById("show-fields").addEventListener("click", () => {
   showAllFields = !showAllFields;
-  renderFields(current.invoice, current.findings);
+  renderFields(current);
 });
 
 const SEVERITY = { error: ["failed", "Error"], warning: ["warnings", "Warning"] };
@@ -924,6 +993,7 @@ function issuesList(issues, prefix) {
     chip.append(icon(STATE_ICONS[state]), word);
     const body = el("div", "body");
     body.append(el("p", "sentence", issue.sentence));
+    if (issue.quote) body.append(el("p", "quote", issue.quote));
     const cell = issue.target && document.getElementById(prefix + issue.target);
     if (cell) {
       const link = el("a", "locate", "Show in table");
@@ -935,7 +1005,7 @@ function issuesList(issues, prefix) {
     const more = el("details");
     more.append(el("summary", "", "Details"), el("code", "rule", issue.rule));
     if (issue.computed) more.append(el("p", "msg", issue.computed));
-    if (issue.message) more.append(el("p", "msg", issue.message));
+    if (issue.message && issue.message !== issue.quote) more.append(el("p", "msg", issue.message));
     body.append(more);
     const li = el("li", "issue");
     li.append(chip, body);
@@ -1153,6 +1223,11 @@ function drawDetail() {
   body.replaceChildren(heading, meta, panel, el("h3", "label", "Issues"), issuesList(d.issues, "review-"));
   if (d.candidates.length) body.append(el("h3", "label", "Values consistent with the checks"), choices(d.candidates));
   if (d.readings.length) body.append(el("h3", "label", "Values as read in the failed checks"), readings(d.readings));
+  if (d.fieldsToCheck.length) {
+    const list = el("ul", "tocheck");
+    for (const name of d.fieldsToCheck) list.append(el("li", "", name));
+    body.append(el("h3", "label", "Check these fields against the paper invoice"), list);
+  }
   drawBar(item, d);
 }
 
@@ -1203,7 +1278,9 @@ function drawBar(item, d = reviewDetail(item)) {
   for (const action of ["checked_manually", "reject"]) {
     document.getElementById(`act-${action}`).disabled = deciding || !d.allowed.includes(action);
   }
-  setText("act-hint", !d.allowed.includes("accept")
+  setText("act-hint", item.status === "cross_check"
+    ? "Nothing to accept or reject. Check the fields listed against the paper, then mark it checked manually."
+    : !d.allowed.includes("accept")
     ? "Nothing to accept or reject. Check every value against the paper, then mark it checked manually."
     : chosen ? "Accept the chosen value once the paper agrees, or reject them all."
       : "Choose a value to accept it, or reject them all.");

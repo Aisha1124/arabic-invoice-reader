@@ -11,6 +11,7 @@ from openai import BadRequestError, OpenAI
 from pydantic import ValidationError
 
 from app import cache
+from app.qr import read_qr
 from app.schema import CallMetadata, ExtractionResult, Invoice
 from app.validate import validate
 
@@ -340,6 +341,7 @@ def extract(
     Responses are cached before parsing: a malformed answer is still a paid answer,
     and re-running must not silently spend again (delete the cache file to retry).
     `use_cache=False` skips the read but still writes, so the latest answer is kept.
+    The invoice's QR is read from the same bytes, with no model, on every call.
     """
     model = model_name()
     record = cache.get(image_bytes, model, PROMPT_VERSION) if use_cache else None
@@ -353,4 +355,4 @@ def extract(
     except ParseError as exc:
         exc.metadata = metadata
         raise
-    return validate(invoice, confidences), metadata
+    return validate(invoice, confidences, read_qr(image_bytes)), metadata

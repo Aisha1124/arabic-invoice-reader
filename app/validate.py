@@ -1,4 +1,5 @@
 import re
+from datetime import datetime
 from decimal import Decimal
 from typing import NamedTuple
 
@@ -9,6 +10,8 @@ from app.schema import (
     Finding,
     Invoice,
     LineItem,
+    QrPayload,
+    QrStatus,
 )
 
 TOLERANCE = Decimal("0.01")
@@ -27,6 +30,18 @@ ARITHMETIC_CHECKS = (
     "total_equals_subtotal_plus_vat_total",
 )
 LINE_TOTAL, LINE_VAT, SUBTOTAL_SUM, VAT_SUM, GRAND_TOTAL = ARITHMETIC_CHECKS
+# Errors that are not arithmetic: two readings that should agree do not. Nothing for
+# the resolver; app/main.py queues them for a person to check against paper.
+QR_RULES = frozenset(
+    {
+        "seller_vat_number_matches_qr",
+        "timestamp_matches_qr",
+        "total_matches_qr",
+        "vat_total_matches_qr",
+    }
+)
+CROSS_CHECK_RULES = QR_RULES | {"invoice_date_matches_timestamp"}
+NOT_SCANNED = "no image was scanned for a QR code"
 # Reasons a check did not run. They name conditions, never amounts.
 LUMPED = "VAT is lumped: no line carries its own VAT amount"
 NO_LINES = "no line items were read"
@@ -182,6 +197,83 @@ def _check_date_matches_timestamp(invoice: Invoice) -> Finding | None:
     )
 
 
+def _shown(value: object) -> str:
+    return "nothing" if value is None else str(value)
+
+
+def _check_qr_seller_vat(invoice: Invoice, qr: QrPayload) -> Finding | None:
+    if invoice.seller_vat_number == qr.seller_vat_number:
+        return None
+    return Finding(
+        rule="seller_vat_number_matches_qr",
+        severity="error",
+        message=(
+            f"QR code says {qr.seller_vat_number},"
+            f" the model read {_shown(invoice.seller_vat_number)}"
+        ),
+        fields=["seller_vat_number"],
+    )
+
+
+def _check_qr_timestamp(invoice: Invoice, qr: QrPayload) -> Finding | None:
+    """To the minute, zone dropped: the page prints HH:MM with no zone, so seconds
+    and a QR's Z or offset cannot be read from it."""
+    said = qr.timestamp.replace(second=0, microsecond=0)
+    read = invoice.invoice_timestamp
+    if read is not None:
+        read = read.replace(tzinfo=None, second=0, microsecond=0)
+    misread = []
+    if read != said:
+        misread.append(("invoice_timestamp", f"timestamp {_minute(read)}"))
+    if invoice.invoice_date != said.date():
+        misread.append(("invoice_date", f"date {_shown(invoice.invoice_date)}"))
+    if not misread:
+        return None
+    return Finding(
+        rule="timestamp_matches_qr",
+        severity="error",
+        message=(
+            f"QR code says {_minute(said)}, the model read"
+            f" {' and '.join(text for _, text in misread)}"
+        ),
+        fields=[field for field, _ in misread],
+    )
+
+
+def _minute(value: datetime | None) -> str:
+    return "nothing" if value is None else f"{value:%Y-%m-%d %H:%M}"
+
+
+def _check_qr_amount(
+    rule: str, field: str, read: Decimal | None, said: Decimal
+) -> Finding | None:
+    if read is not None and _within_tolerance(said, read):
+        return None
+    return Finding(
+        rule=rule,
+        severity="error",
+        message=f"QR code says {said}, the model read {_shown(read)}",
+        fields=[field],
+    )
+
+
+def _qr_findings(invoice: Invoice, qr: QrPayload) -> list[Finding]:
+    found = (
+        _check_qr_seller_vat(invoice, qr),
+        _check_qr_timestamp(invoice, qr),
+        _check_qr_amount(
+            rule="total_matches_qr", field="total", read=invoice.total, said=qr.total
+        ),
+        _check_qr_amount(
+            rule="vat_total_matches_qr",
+            field="vat_total",
+            read=invoice.vat_total,
+            said=qr.vat_total,
+        ),
+    )
+    return [f for f in found if f is not None]
+
+
 def _check_grand_total(invoice: Invoice) -> Ran | str:
     if invoice.subtotal is None or invoice.vat_total is None or invoice.total is None:
         missing = [
@@ -325,7 +417,9 @@ def _outcome(rule: str, line: int | None, result: Ran | str) -> CheckOutcome:
     )
 
 
-def validate(invoice: Invoice, confidences: dict[str, float]) -> ExtractionResult:
+def validate(
+    invoice: Invoice, confidences: dict[str, float], qr: QrPayload | str = NOT_SCANNED
+) -> ExtractionResult:
     """
     `confidences` maps field paths (e.g. "total", "line_items[0].vat_amount") to the
     model's self-reported scores. They are recorded, never acted on: measured on this
@@ -333,6 +427,9 @@ def validate(invoice: Invoice, confidences: dict[str, float]) -> ExtractionResul
     needs_review comes from findings alone. Any finding of either severity queues the
     invoice: a warning means the invoice itself is non-compliant, and a human must
     still see that.
+
+    `qr` is the invoice's decoded QR (app/qr.py), or the reason it was not read; a
+    QR that was not read raises no finding, since there is nothing to compare.
     """
     findings, checks = _arithmetic(invoice)
     whole_invoice = (
@@ -345,6 +442,8 @@ def validate(invoice: Invoice, confidences: dict[str, float]) -> ExtractionResul
         _check_simplified_qr_fields(invoice),
     )
     findings.extend(f for f in whole_invoice if f is not None)
+    if isinstance(qr, QrPayload):
+        findings.extend(_qr_findings(invoice, qr))
     error_fields = {
         field for f in findings if f.severity == "error" for field in f.fields
     }
@@ -359,4 +458,9 @@ def validate(invoice: Invoice, confidences: dict[str, float]) -> ExtractionResul
         findings=findings,
         status="needs_review" if findings else "ok",
         checks=checks,
+        qr=(
+            QrStatus(status="read")
+            if isinstance(qr, QrPayload)
+            else QrStatus(status="not_read", reason=qr)
+        ),
     )

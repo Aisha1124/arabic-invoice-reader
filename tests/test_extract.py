@@ -411,3 +411,20 @@ def test_usage_logged_with_prices(
     # 1200 * 2.50 / 1e6 + 300 * 10.00 / 1e6
     assert metadata.estimated_cost_usd == Decimal("0.006")
     assert "estimated_cost=$0.006000" in caplog.text
+
+
+def test_extract_cross_checks_the_image_qr_without_the_model() -> None:
+    """The QR is read from the same bytes the model saw; the fixture QR disagrees
+    with the English fixture's values, so its findings appear."""
+    image = (Path(__file__).parent / "fixtures" / "zatca_qr.png").read_bytes()
+    result, _ = extract.extract(image, client=FakeClient())
+
+    assert result.qr.status == "read"
+    assert "total_matches_qr" in {f.rule for f in result.findings}
+
+
+def test_extract_on_an_image_without_a_qr_says_qr_not_read() -> None:
+    result, _ = extract.extract(PNG, client=FakeClient())
+
+    assert result.qr.status == "not_read"
+    assert not any(f.rule.endswith("_matches_qr") for f in result.findings)

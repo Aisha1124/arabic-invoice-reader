@@ -235,6 +235,47 @@ for s in load_samples():
 PY
 ```
 
+## QR cross-check
+
+Run 2026-10-02 on gpt-4o's cached answers for all 30 samples (`python -m eval.run_eval`,
+0 API calls, 30 cache hits). The generator draws a ZATCA QR only on simplified
+invoices with a seller VAT number: 13 of 30 samples, 2 of the 6 Arabic-Indic
+ones. Before building the check, zxing-cpp 3.1.1 was run on all 30 images: it
+decoded all 13 QR codes to exactly the `qr_base64` in `ground_truth.json` and
+found no QR on the other 17 (kept as a test in `tests/test_qr.py`).
+
+Six header fields are scored against ground truth. A misread is "caught" when a
+QR finding names that field. The invoice number is scored to show that it is
+never caught: no ZATCA QR contains it.
+
+```
+QR cross-check, header fields against ground truth:
+  arabic_indic: QR on 2 of 6 invoices, read in 2 of 6 runs; 14 header misreads, 5 caught, 9 missed, 0 false alarms
+    INV-2026-1002.png  total: missed: no QR on the invoice
+    INV-2026-1002.png  vat_total: missed: no QR on the invoice
+    INV-2026-1003.png  invoice_number: missed: not in the QR
+    INV-2026-1003.png  invoice_date: missed: no QR on the invoice
+    INV-2026-1003.png  invoice_timestamp: missed: no QR on the invoice
+    INV-2026-1003.png  seller_vat_number: missed: no QR on the invoice
+    INV-2026-1012.png  invoice_number: missed: not in the QR
+    INV-2026-1012.png  invoice_date: caught
+    INV-2026-1012.png  invoice_timestamp: caught
+    INV-2026-1012.png  seller_vat_number: caught
+    INV-2026-1012.png  total: caught
+    INV-2026-1012.png  vat_total: caught
+    INV-2026-1020.png  total: missed: no QR on the invoice
+    INV-2026-1020.png  vat_total: missed: no QR on the invoice
+  latin: QR on 11 of 24 invoices, read in 11 of 24 runs; 0 header misreads, 0 caught, 0 missed, 0 false alarms
+```
+
+The 5 catches are all on INV-2026-1012. Arithmetic had already sent all four
+misread invoices to review, so what the QR adds here is naming the header fields
+in question; on 1012 the date and time misreads are flagged by nothing else
+(the date and the timestamp were misread consistently, so they agree with each
+other). On INV-2026-1003 the invoice number and the date are misread and no
+check of any kind flags them. No false alarms: the 11 Latin invoices with a QR,
+all read correctly, raised no QR finding.
+
 ## Reproducing
 
 ```

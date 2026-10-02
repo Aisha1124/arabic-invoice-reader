@@ -9,13 +9,21 @@ import json
 import re
 import shutil
 import subprocess
+from decimal import Decimal
 from pathlib import Path
 
 import pytest
 
 from app.resolve import _checks, resolve
 from app.review import _check_fits
-from app.schema import Invoice, LineItem, ReviewItem, ReviewOutcome
+from app.schema import (
+    CrossCheck,
+    Invoice,
+    LineItem,
+    QrPayload,
+    ReviewItem,
+    ReviewOutcome,
+)
 from app.validate import ARITHMETIC_CHECKS, validate
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -73,6 +81,26 @@ def _sentences(findings: list[tuple[str, list[str]]]) -> list[str]:
     )
 
 
+def test_every_script_on_the_page_parses() -> None:
+    """Only the wording block runs here; a syntax error in the other would stop the
+    whole page and no other test would see it."""
+    blocks = re.findall(r"<script[^>]*>(.*?)</script>", PAGE, re.DOTALL)
+    assert len(blocks) == 2
+    done = subprocess.run(
+        [
+            "node",
+            "-e",
+            "for (const b of JSON.parse(require('fs').readFileSync(0, 'utf8'))) new Function(b);",
+        ],
+        input=json.dumps(blocks),
+        capture_output=True,
+        text=True,
+        timeout=60,
+        check=False,
+    )
+    assert done.returncode == 0, done.stderr
+
+
 def test_wording_block_runs_without_a_page() -> None:
     assert _run(
         'console.log(JSON.stringify(plainField("line_items[0].unit_price")))'
@@ -80,7 +108,7 @@ def test_wording_block_runs_without_a_page() -> None:
 
 
 def test_every_validation_rule_has_its_own_sentence() -> None:
-    assert len(RULES) == 12, RULES
+    assert len(RULES) == 16, RULES
     sentences = _sentences([(rule, _fields(rule, 0)) for rule in RULES])
 
     for rule, sentence in zip(RULES, sentences, strict=True):
@@ -404,6 +432,10 @@ TARGETS = {
     "standard_invoice_has_buyer_vat_number": "buyer_vat_number",
     "vat_is_itemised_per_line": "vat_total",
     "simplified_invoice_has_qr_fields": "seller_name",
+    "seller_vat_number_matches_qr": "seller_vat_number",
+    "timestamp_matches_qr": "invoice_timestamp",
+    "total_matches_qr": "total",
+    "vat_total_matches_qr": "vat_total",
 }
 # The fields validate.py puts on each rule's finding, in its order.
 FINDING_FIELDS = {
@@ -427,6 +459,10 @@ FINDING_FIELDS = {
     "standard_invoice_has_buyer_vat_number": ["buyer_vat_number"],
     "vat_is_itemised_per_line": ["vat_total", "line_items[0].vat_amount"],
     "simplified_invoice_has_qr_fields": ["seller_name", "total"],
+    "seller_vat_number_matches_qr": ["seller_vat_number"],
+    "timestamp_matches_qr": ["invoice_timestamp", "invoice_date"],
+    "total_matches_qr": ["total"],
+    "vat_total_matches_qr": ["vat_total"],
 }
 
 
@@ -488,6 +524,7 @@ def test_legacy_review_items_fall_back_to_their_stored_labels() -> None:
             "sentence": "The line totals do not add up to the subtotal",
             "rule": "sum of line totals = subtotal",
             "message": None,
+            "quote": None,
             "computed": None,
             "target": None,
         }
@@ -509,6 +546,7 @@ def _item(invoice: Invoice) -> dict:
     """A review item as GET /reviews returns it, from the real resolver."""
     item = resolve(invoice).model_dump(mode="json")
     item["reference"] = "R-0007"
+    item["cross_checks"] = []
     return item
 
 
@@ -774,14 +812,21 @@ def test_legacy_item_detail_falls_back_to_stored_labels() -> None:
     ]
 
 
-@pytest.mark.parametrize("status", ["suggested", "ambiguous", "unresolvable"])
+@pytest.mark.parametrize(
+    "status", ["suggested", "ambiguous", "unresolvable", "cross_check"]
+)
 def test_page_offers_exactly_the_decisions_the_queue_accepts(status: str) -> None:
-    invoice = {
-        "suggested": _one_line("12.43"),
-        "ambiguous": AMBIGUOUS,
-        "unresolvable": _one_line("12.43", total="99.99"),
-    }[status]
-    raw = _stored(invoice)
+    raw = (
+        _cross_check_item()
+        if status == "cross_check"
+        else _stored(
+            {
+                "suggested": _one_line("12.43"),
+                "ambiguous": AMBIGUOUS,
+                "unresolvable": _one_line("12.43", total="99.99"),
+            }[status]
+        )
+    )
     item = ReviewItem(
         **raw,
         id="x",
@@ -834,3 +879,157 @@ def test_review_view_has_inbox_detail_and_a_sticky_action_bar() -> None:
     assert re.search(r"\.actionbar \{ position: sticky; inset-block-end: 0;", PAGE)
     assert 'action === "reject" && !confirm(' in PAGE
     assert "checkMap" not in PAGE and 'class="checkmap"' not in PAGE
+
+
+# --- QR cross-check: issues, coverage, review items ----------------------------------
+
+QR_RULES = [
+    "seller_vat_number_matches_qr",
+    "timestamp_matches_qr",
+    "total_matches_qr",
+    "vat_total_matches_qr",
+]
+
+
+def _qr_for(invoice: Invoice, **overrides: object) -> QrPayload:
+    values: dict[str, object] = {
+        "seller_name": "s",
+        "seller_vat_number": invoice.seller_vat_number,
+        "timestamp": invoice.invoice_timestamp,
+        "total": invoice.total,
+        "vat_total": invoice.vat_total,
+    }
+    values.update(overrides)
+    return QrPayload(**values)
+
+
+DATED = {"invoice_date": "2026-01-15"}
+
+
+def _qr_response(invoice: Invoice, qr: QrPayload | str) -> dict:
+    body = validate(invoice, {}, qr).model_dump(mode="json")
+    body["review"] = None
+    return body
+
+
+def _cross_check_item() -> dict:
+    item = _stored(_one_line("13.43"))
+    item.update(
+        status="cross_check",
+        reason="fields disagree with the QR code or with each other",
+        failed_checks=[],
+        candidates=[],
+        involved=[],
+        cross_checks=[
+            CrossCheck(rule="total_matches_qr", fields=["total"]).model_dump(),
+            CrossCheck(
+                rule="invoice_date_matches_timestamp",
+                fields=["invoice_date", "invoice_timestamp"],
+            ).model_dump(),
+        ],
+    )
+    return item
+
+
+def test_qr_issues_say_disagrees_and_show_what_the_qr_code_says() -> None:
+    invoice = _two_lines(**DATED)
+    body = _qr_response(invoice, _qr_for(invoice, total=Decimal("387.50")))
+    (issue,) = _issues(
+        f"issuesFromFindings({json.dumps(body['findings'])}, {json.dumps(body['checks'])})"
+    )
+
+    assert issue["sentence"] == "The total disagrees with the QR code"
+    assert issue["quote"] == "QR code says 387.50, the model read 287.50"
+    assert issue["target"] == "total"
+
+
+def _coverage(field: str, body: dict) -> str:
+    return _js(
+        f"fieldCoverage({json.dumps(field)}, {json.dumps(body['qr'])},"
+        f" {json.dumps(body['checks'])})"
+    )
+
+
+def test_coverage_says_what_each_field_was_checked_against() -> None:
+    invoice = _two_lines(**DATED)
+    read = _qr_response(invoice, _qr_for(invoice))
+    unread = _qr_response(invoice, "no QR code found")
+
+    assert _coverage("invoice_number", read) == "Not cross-checked"
+    assert _coverage("invoice_number", unread) == "Not cross-checked"
+    assert _coverage("seller_name", read) == "Not cross-checked"
+    assert _coverage("buyer_vat_number", read) == "Not cross-checked"
+    assert _coverage("seller_vat_number", read) == "Checked by QR"
+    assert _coverage("seller_vat_number", unread) == "Not cross-checked"
+    assert _coverage("invoice_date", read) == "Checked by QR"
+    assert _coverage("invoice_timestamp", unread) == "Not cross-checked"
+    assert _coverage("total", read) == "Checked by QR and arithmetic"
+    assert _coverage("total", unread) == "Checked by arithmetic"
+    assert _coverage("subtotal", read) == "Checked by arithmetic"
+
+
+def test_coverage_does_not_count_a_check_that_did_not_run() -> None:
+    """No line items and no total: neither sum that reads the subtotal can run."""
+    nothing_ran = _qr_response(
+        _two_lines(line_items=[], total=None), "no QR code found"
+    )
+    assert _coverage("subtotal", nothing_ran) == "Not cross-checked"
+    no_lines = _qr_response(_two_lines(line_items=[]), "no QR code found")
+    assert _coverage("subtotal", no_lines) == "Checked by arithmetic"
+
+
+def test_qr_summary_says_qr_not_read_with_the_reason() -> None:
+    invoice = _two_lines(**DATED)
+    summary = [
+        _js(f"qrSummary({json.dumps(b['qr'])}, {json.dumps(b['findings'])})")
+        for b in (
+            _qr_response(invoice, "no QR code found"),
+            _qr_response(invoice, _qr_for(invoice)),
+            _qr_response(invoice, _qr_for(invoice, total=Decimal("1.00"))),
+        )
+    ]
+
+    assert summary == [
+        {"state": "not_needed", "text": "QR not read: no QR code found"},
+        {"state": "passed", "text": "QR code read; it agrees with what the model read"},
+        {"state": "failed", "text": "QR code read; 1 field disagrees with it"},
+    ]
+
+
+def test_queued_without_a_resolver_skips_resolve_and_queues() -> None:
+    body = _response(_two_lines(invoice_date="2026-01-16"))
+    body["review"] = ReviewOutcome(status="queued", reference="R-0009").model_dump(
+        mode="json"
+    )
+
+    stages = _stages(body)
+    assert [(s["stage"], s["state"]) for s in stages] == [
+        ("Read", "passed"),
+        ("Check", "failed"),
+        ("Resolve", "not_needed"),
+        ("Review", "queued"),
+    ]
+    assert "R-0009" in stages[3]["label"]
+    assert _verdict(body)["sentence"].endswith("Queued for review.")
+
+
+def test_cross_check_item_lists_the_fields_to_check_against_paper() -> None:
+    d = _detail(_cross_check_item())
+
+    assert d["allowed"] == ["checked_manually"]
+    assert d["candidates"] == [] and d["readings"] == []
+    assert d["fieldsToCheck"] == ["Total", "Invoice date", "Timestamp"]
+    assert [i["sentence"] for i in d["issues"]] == [
+        "The total disagrees with the QR code",
+        "The invoice date does not match the date in the timestamp",
+    ]
+    assert "correct" not in json.dumps(d).lower()
+    entry = _js(f"inboxEntry({json.dumps(_cross_check_item())})")
+    assert (entry["word"], entry["summary"]) == ("Cross-check", "2 failed checks")
+
+
+def test_legacy_item_without_cross_checks_lists_no_fields() -> None:
+    item = _stored(_one_line("12.43", total="99.99"))
+    item["cross_checks"] = None
+
+    assert _detail(item)["fieldsToCheck"] == []

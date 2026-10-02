@@ -2,7 +2,7 @@
 
 What this service does with an uploaded invoice, written from the code as it is
 at the time of writing (`app/main.py`, `app/extract.py`, `app/cache.py`,
-`app/store.py`, `app/resolve.py`, `app/review.py`). Where the code does not do something, this document says so.
+`app/store.py`, `app/qr.py`, `app/resolve.py`, `app/review.py`). Where the code does not do something, this document says so.
 It does not claim PDPL compliance; it describes design choices and the PDPL
 concern each one addresses.
 
@@ -14,6 +14,14 @@ The image is never written to disk by the application. It exists in process
 memory for the duration of the request and is discarded when the response is
 sent. Its SHA-256 is computed and used twice: as the cache key and as the
 `image_sha256` column of the audit row.
+
+The invoice's ZATCA QR code, if it has one, is decoded from the same bytes in
+memory by zxing-cpp, on this machine, with no network request and no model. Its
+values (seller name, seller VAT number, timestamp, totals) are compared with the
+extraction and then discarded. They reach the response only inside the messages
+of findings where they disagree ("QR code says …"). They are not cached, not
+logged and not queued: the audit row records the rule names of those findings,
+and a review item records rule names and field paths only.
 
 ## 2. What is sent to OpenAI
 
@@ -38,10 +46,10 @@ On a cache hit no request is made and nothing leaves the machine.
 |---|---|---|---|
 | `.cache/<sha256>_<model>_<prompt_version>.json` | The model's **raw response text**, plus token counts, latency and whether `temperature=0` was accepted | **Yes** | Indefinite. No TTL, no eviction. |
 | `data/app.db`, table `audit_log` | One row per extraction: UUID, UTC timestamp, image SHA-256, model, prompt version, counts of extracted and flagged fields, validation findings as `{rule, severity, fields}`, latency, estimated cost, cache-hit and temperature flags | No | Indefinite. Append-only: the module contains no UPDATE or DELETE, and a test enforces that. |
-| `data/app.db`, table `review_queue` | One row per invoice whose arithmetic failed, awaiting a person: review reference (`R-0042`), upload time, audit row id, image SHA-256, field paths, **the values read in the failed checks and the candidate values**, failed check names, reason, and the pass/fail/not-checked outcome of each arithmetic check by rule and line number (no amounts) | **Amounts only**: no names, VAT numbers, descriptions or images | Until a person decides it (accepted, rejected or checked manually); the row is removed in the same transaction that logs the decision |
+| `data/app.db`, table `review_queue` | One row per invoice with an error finding, awaiting a person: review reference (`R-0042`), upload time, audit row id, image SHA-256, field paths, **the values read in the failed checks and the candidate values** (arithmetic failures only), failed check names, reason, the pass/fail/not-checked outcome of each arithmetic check by rule and line number (no amounts), and each failed cross-check (QR disagreement, date vs timestamp) as rule name and field paths (no values) | **Amounts only**: no names, VAT numbers, descriptions or images | Until a person decides it (accepted, rejected or checked manually); the row is removed in the same transaction that logs the decision |
 | `data/app.db`, table `review_counter` | One row per issued reference number, nothing else | No | Indefinite. Keeps reference numbers from being reused |
-| `data/app.db`, table `resolver_events` | One row per resolver outcome and per review decision: audit row id, review reference, event, failed check names, field path, confusion type, rank, candidate count | No | Indefinite. Append-only, like `audit_log` |
-| Process memory | The uploaded image, the parsed result | Yes | Until the response is sent |
+| `data/app.db`, table `resolver_events` | One row per resolver outcome, cross-check item and review decision: audit row id, review reference, event, failed check and cross-check rule names, field path, confusion type, rank, candidate count | No | Indefinite. Append-only, like `audit_log` |
+| Process memory | The uploaded image, the parsed result, the decoded QR values | Yes | Until the response is sent |
 | Server log (stderr) | Model name, token counts, latency, cache hits; on a parse failure, the exception message, which can quote fragments of the model's output | Can, on parse failure only | Wherever the operator sends stderr |
 
 **`.cache/` is where the PII lives.** Each cache file is the model's JSON answer

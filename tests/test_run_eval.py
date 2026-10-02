@@ -27,6 +27,8 @@ from eval.run_eval import (
     golden_record,
     golden_report,
     main,
+    qr_outcome,
+    qr_report,
     report,
     subgroup_table,
     unverified_fields,
@@ -455,3 +457,81 @@ def test_main_golden_uses_cache_and_writes_record(
     written = json.loads(path.read_text(encoding="utf-8"))
     assert written["totals"]["original_call_latency_ms"]["max"] == 7
     assert written["invoices"][0]["metadata"]["cache_hit"] is True
+
+
+# --- QR cross-check measurement ------------------------------------------------------
+
+
+def _qr_sample(qr: bool = True, numerals: str = "arabic_indic") -> Sample:
+    sample = _sample()
+    sample.meta.qr_base64 = "AQ==" if qr else None
+    sample.meta.numerals = numerals
+    return sample
+
+
+def _qr_run(
+    read: bool = True, flagged: list[str] | None = None, **misread: object
+) -> Run:
+    run = _run(_invoice(**misread))
+    run.qr_read = read
+    run.qr_flagged = flagged or []
+    return run
+
+
+def test_qr_outcome_names_why_a_misread_was_missed() -> None:
+    wrong_date = {"invoice_date": date(2023, 1, 15)}
+
+    assert (
+        qr_outcome(
+            _qr_sample(),
+            _qr_run(flagged=["invoice_date"], **wrong_date),
+            "invoice_date",
+        )
+        == "caught"
+    )
+    assert qr_outcome(
+        _qr_sample(qr=False), _qr_run(read=False, **wrong_date), "invoice_date"
+    ) == ("missed: no QR on the invoice")
+    assert qr_outcome(
+        _qr_sample(), _qr_run(read=False, **wrong_date), "invoice_date"
+    ) == ("missed: QR not read")
+    assert qr_outcome(_qr_sample(), _qr_run(**wrong_date), "invoice_date") == (
+        "missed: QR read but raised nothing"
+    )
+    assert qr_outcome(
+        _qr_sample(), _qr_run(invoice_number="INV-2"), "invoice_number"
+    ) == ("missed: not in the QR")
+
+
+def test_qr_outcome_counts_a_flag_on_a_correct_read_as_a_false_alarm() -> None:
+    assert (
+        qr_outcome(_qr_sample(), _qr_run(flagged=["total"]), "total") == "false alarm"
+    )
+    assert qr_outcome(_qr_sample(), _qr_run(), "total") is None
+
+
+def test_qr_report_counts_per_numeral_group_from_the_runs() -> None:
+    caught = _qr_sample()
+    caught.meta.file = "caught.png"
+    no_qr = _qr_sample(qr=False)
+    no_qr.meta.file = "no_qr.png"
+    latin = _qr_sample(numerals="latin")
+    latin.meta.file = "latin.png"
+    runs = {
+        "caught.png": [_qr_run(flagged=["total"], total=Decimal("1.00"))],
+        "no_qr.png": [_qr_run(read=False, invoice_number="INV-9")],
+        "latin.png": [_qr_run()],
+    }
+
+    lines = qr_report([caught, no_qr, latin], runs)
+
+    assert (
+        "  arabic_indic: QR on 1 of 2 invoices, read in 1 of 2 runs;"
+        " 2 header misreads, 1 caught, 1 missed, 0 false alarms"
+    ) in lines
+    assert "    caught.png  total: caught" in lines
+    assert "    no_qr.png  invoice_number: missed: not in the QR" in lines
+    assert (
+        "  latin: QR on 1 of 1 invoices, read in 1 of 1 runs;"
+        " 0 header misreads, 0 caught, 0 missed, 0 false alarms"
+    ) in lines

@@ -1,6 +1,7 @@
 import hashlib
 import logging
 from datetime import date, datetime
+from decimal import Decimal
 from pathlib import Path
 
 import httpx
@@ -8,7 +9,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 from app import main, store
-from app.schema import CallMetadata, Invoice, LineItem
+from app.schema import CallMetadata, Invoice, LineItem, QrPayload
 from app.store import read_resolver_events
 from app.validate import validate
 
@@ -96,6 +97,7 @@ def test_arithmetic_misread_is_queued_with_a_reference(
         "findings",
         "status",
         "checks",
+        "qr",
         "review",
     }
     assert body["review"] == {
@@ -140,10 +142,10 @@ def test_structural_warning_alone_is_not_queued(
     assert _reviews(client) == []
 
 
-def test_date_mismatch_alone_is_not_queued(
+def test_date_mismatch_alone_is_queued_for_checked_manually(
     client: TestClient, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """An error, but not arithmetic: the resolver has nothing to work with."""
+    """An error, not arithmetic: nothing for the resolver, but a person must look."""
     _serve(
         monkeypatch,
         _invoice(
@@ -153,8 +155,19 @@ def test_date_mismatch_alone_is_not_queued(
     )
     body = _upload(client)
     assert "invoice_date_matches_timestamp" in [f["rule"] for f in body["findings"]]
-    assert body["review"] is None
-    assert _reviews(client) == []
+    assert body["review"] == {
+        "status": "queued",
+        "reference": "R-0001",
+        "resolver_status": None,
+    }
+    (item,) = _reviews(client)
+    assert item["status"] == "cross_check"
+    assert item["cross_checks"] == [
+        {
+            "rule": "invoice_date_matches_timestamp",
+            "fields": ["invoice_date", "invoice_timestamp"],
+        }
+    ]
 
 
 def test_reupload_of_the_same_image_keeps_one_review(
@@ -361,3 +374,73 @@ def test_vendored_fonts_are_served(client: TestClient) -> None:
     response = client.get("/static/fonts/IBMPlexSansArabic-Regular.woff2")
     assert response.status_code == 200
     assert response.content[:4] == b"wOF2"
+
+
+# --- QR cross-check ---------------------------------------------------------------
+
+QR_VAT = "300000000000099"
+
+
+def _qr_disagreeing_on_vat_and_total() -> QrPayload:
+    return QrPayload(
+        seller_name=SELLER_NAME,
+        seller_vat_number=QR_VAT,
+        timestamp=datetime(2026, 7, 31, 9, 0),  # noqa: DTZ001
+        total=Decimal("4633.00"),
+        vat_total=Decimal("6.04"),
+    )
+
+
+def _serve_with_qr(monkeypatch: pytest.MonkeyPatch, qr: QrPayload | str) -> None:
+    invoice = _invoice(
+        invoice_date=date(2026, 7, 31),
+        invoice_timestamp=datetime(2026, 7, 31, 9, 0),  # noqa: DTZ001
+    )
+    monkeypatch.setattr(
+        main, "extract", lambda image: (validate(invoice, {}, qr), META)
+    )
+
+
+def test_qr_disagreement_is_queued_without_any_value(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _serve_with_qr(monkeypatch, _qr_disagreeing_on_vat_and_total())
+    body = _upload(client)
+
+    assert body["qr"] == {"status": "read", "reason": None}
+    assert {f["rule"] for f in body["findings"]} == {
+        "seller_vat_number_matches_qr",
+        "total_matches_qr",
+    }
+    assert body["review"]["resolver_status"] is None
+    (item,) = _reviews(client)
+    assert item["status"] == "cross_check"
+    assert [c["fields"] for c in item["cross_checks"]] == [
+        ["seller_vat_number"],
+        ["total"],
+    ]
+    queue = client.get("/reviews").text
+    for value in (QR_VAT, SELLER_VAT, "4633.00", "46.33", SELLER_NAME):
+        assert value not in queue
+
+
+def test_qr_content_never_reaches_the_audit_log_or_the_resolver_log(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _serve_with_qr(monkeypatch, _qr_disagreeing_on_vat_and_total())
+    _upload(client)
+
+    logged = client.get("/audit").text + repr(read_resolver_events(10))
+    for value in (QR_VAT, SELLER_VAT, "4633.00", SELLER_NAME, "2026-07-31"):
+        assert value not in logged
+    assert "total_matches_qr" in logged
+
+
+def test_qr_not_read_is_reported_and_queues_nothing(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _serve_with_qr(monkeypatch, "no QR code found")
+    body = _upload(client)
+
+    assert body["qr"] == {"status": "not_read", "reason": "no QR code found"}
+    assert body["review"] is None
