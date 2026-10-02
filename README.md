@@ -72,9 +72,10 @@ every run with a wrong amount also failed an arithmetic check
   …"). A QR that cannot be found or decoded is reported as "QR not read",
   never guessed. The QR is a strong signal, not proof.
 - **Review queue and page** (`app/review.py`, "Review queue" tab). Every
-  invoice with an error finding gets a short reference such as `R-0042` to
+  invoice marked "needs review" gets a short reference such as `R-0042` to
   write on the paper invoice: failed arithmetic, a disagreement with the QR
-  code, or a date that does not match its timestamp. A person accepts a
+  code, a date that does not match its timestamp, or a ZATCA compliance
+  warning. A person accepts a
   candidate, rejects them all, or marks the invoice as checked manually (the
   only choice when there is nothing to suggest). Nothing is ever written back
   to the invoice: accepting only records the decision.
@@ -87,10 +88,10 @@ POST /extract (raw PNG/JPEG body, ≤10 MB, in memory only)
   → app/validate.py  arithmetic and cross-check rules (error: QR disagreement, date vs
                      timestamp) + ZATCA structural rules (warning)
   → app/store.py     one append-only audit row: hash, counts, rule names, tokens, latency
-  → if an error finding was raised:
+  → if any finding was raised:
       app/resolve.py (arithmetic only) which single cell explains the failed checks
       app/review.py  review_queue row + reference R-0042: amounts and field paths for
-                     arithmetic, rule names and field paths only for cross-checks
+                     arithmetic, rule names and field paths only for everything else
       app/store.py   append-only resolver event (no amounts)
   → JSON response (200 for both "ok" and "needs_review"), with `checks` (every arithmetic
     check: pass, fail or not checked and why, with the computed value and the
@@ -150,7 +151,7 @@ or the date: the invoice reaches review only because its arithmetic fails.
 
 ## Tests
 
-372 tests, all passing, all offline (no API calls). They include:
+386 tests, all passing, all offline (no API calls). They include:
 
 - nine invoices with one known confusion injected (٣→٢, ٨٤→٤٨, a dropped
   digit, …), one per kind of cell, each checked for the right cell and the
@@ -158,7 +159,7 @@ or the date: the invoice reaches review only because its arithmetic fails.
 - invoices the resolver must refuse: two misread cells, a cell whose checks
   can't all be satisfied, a missing line-item table;
 - the review endpoints: decisions, the rule that an unresolvable or
-  cross-check invoice can only be marked checked manually, repeat uploads, and
+  cross-check or compliance-warning invoice can only be marked checked manually, repeat uploads, and
   that no names or VAT numbers reach the queue or the logs, QR values included;
 - the QR decoder on a committed synthetic QR, malformed TLV payloads, and the
   30 eval images (every QR read exactly, none found where there is none).
@@ -181,9 +182,6 @@ whole-number quantities, and ignoring the confusion table. Each break made 1 or
   A real invoice whose QR holds UTC while the page prints Saudi time (UTC+3)
   would raise a false timestamp disagreement, and near midnight a false date
   one.
-- **Warnings alone are not queued.** A compliance warning (say, a missing buyer
-  VAT number) sets the invoice to "needs review" but creates no review item:
-  only error findings are queued.
 - **Arithmetic catches the invoice, not every wrong cell.** Some misreads sit
   outside the failed checks because the wrong values still add up. On the five
   failing invoices above, 9 of 42 misread values were outside every failed
@@ -223,7 +221,7 @@ Python 3.11+.
 python3 -m venv .venv
 .venv/bin/pip install -r requirements.txt
 cp .env.example .env              # set OPENAI_API_KEY and OPENAI_MODEL
-.venv/bin/python -m pytest        # 372 passed here, with the sample images present
+.venv/bin/python -m pytest        # 386 passed here, with the sample images present
 ```
 
 The app does not read `.env` itself:

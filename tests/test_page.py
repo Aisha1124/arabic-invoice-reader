@@ -17,12 +17,12 @@ import pytest
 from app.resolve import _checks, resolve
 from app.review import _check_fits
 from app.schema import (
-    CrossCheck,
     Invoice,
     LineItem,
     QrPayload,
     ReviewItem,
     ReviewOutcome,
+    RuleFinding,
 )
 from app.validate import ARITHMETIC_CHECKS, validate
 
@@ -546,7 +546,7 @@ def _item(invoice: Invoice) -> dict:
     """A review item as GET /reviews returns it, from the real resolver."""
     item = resolve(invoice).model_dump(mode="json")
     item["reference"] = "R-0007"
-    item["cross_checks"] = []
+    item["rule_findings"] = []
     return item
 
 
@@ -920,9 +920,9 @@ def _cross_check_item() -> dict:
         failed_checks=[],
         candidates=[],
         involved=[],
-        cross_checks=[
-            CrossCheck(rule="total_matches_qr", fields=["total"]).model_dump(),
-            CrossCheck(
+        rule_findings=[
+            RuleFinding(rule="total_matches_qr", fields=["total"]).model_dump(),
+            RuleFinding(
                 rule="invoice_date_matches_timestamp",
                 fields=["invoice_date", "invoice_timestamp"],
             ).model_dump(),
@@ -1028,8 +1028,88 @@ def test_cross_check_item_lists_the_fields_to_check_against_paper() -> None:
     assert (entry["word"], entry["summary"]) == ("Cross-check", "2 failed checks")
 
 
-def test_legacy_item_without_cross_checks_lists_no_fields() -> None:
+def test_legacy_item_without_rule_findings_lists_no_fields() -> None:
     item = _stored(_one_line("12.43", total="99.99"))
-    item["cross_checks"] = None
+    item["rule_findings"] = None
 
     assert _detail(item)["fieldsToCheck"] == []
+
+
+# --- compliance warnings in the review queue ----------------------------------------
+
+WARNING_RULES = sorted(
+    set(
+        re.findall(
+            r'rule="(\w+)",\s*severity="warning"',
+            (ROOT / "app" / "validate.py").read_text(encoding="utf-8"),
+        )
+    )
+)
+
+
+def _compliance_item() -> dict:
+    item = _cross_check_item()
+    item.update(
+        status="compliance",
+        reason="the invoice may not comply with ZATCA",
+        rule_findings=[
+            RuleFinding(
+                rule="standard_invoice_has_buyer_vat_number",
+                fields=["buyer_vat_number"],
+            ).model_dump()
+        ],
+    )
+    return item
+
+
+def test_page_knows_which_rules_are_warnings() -> None:
+    assert len(WARNING_RULES) >= 5
+    assert sorted(_js("[...WARNING_RULES]")) == WARNING_RULES
+
+
+def test_compliance_item_shows_warnings_and_takes_checked_manually_only() -> None:
+    d = _detail(_compliance_item())
+
+    assert d["allowed"] == ["checked_manually"]
+    assert [(i["severity"], i["sentence"]) for i in d["issues"]] == [
+        (
+            "warning",
+            "A standard invoice needs the buyer's VAT number, and it is missing",
+        )
+    ]
+    assert d["fieldsToCheck"] == ["Buyer VAT number"]
+    assert d["tone"] == "neutral" and "comply" in d["text"]
+    entry = _js(f"inboxEntry({json.dumps(_compliance_item())})")
+    assert (entry["word"], entry["summary"]) == ("Compliance", "1 failed check")
+
+
+def test_warnings_only_queued_shows_the_reference_and_queue_stage() -> None:
+    body = _response(_two_lines(seller_vat_number=None))
+    body["review"] = ReviewOutcome(status="queued", reference="R-0010").model_dump(
+        mode="json"
+    )
+
+    assert [s["state"] for s in _stages(body)] == [
+        "passed",
+        "warnings",
+        "not_needed",
+        "queued",
+    ]
+    v = _verdict(body)
+    assert v["reference"] == "R-0010"
+    assert v["sentence"].endswith("Queued for review.")
+
+
+def test_every_field_a_queued_finding_names_has_a_plain_name() -> None:
+    fields = sorted(
+        {
+            f
+            for r, fs in FINDING_FIELDS.items()
+            if r not in ARITHMETIC_CHECKS
+            for f in fs
+        }
+        - {"line_items"}
+    )
+    names = _js(f"{json.dumps(fields)}.map(plainField)")
+    for field, name in zip(fields, names, strict=True):
+        assert "_" not in name, (field, name)

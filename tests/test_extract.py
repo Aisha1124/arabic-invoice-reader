@@ -413,7 +413,7 @@ def test_usage_logged_with_prices(
     assert "estimated_cost=$0.006000" in caplog.text
 
 
-def test_extract_cross_checks_the_image_qr_without_the_model() -> None:
+def test_extract_rule_findings_the_image_qr_without_the_model() -> None:
     """The QR is read from the same bytes the model saw; the fixture QR disagrees
     with the English fixture's values, so its findings appear."""
     image = (Path(__file__).parent / "fixtures" / "zatca_qr.png").read_bytes()

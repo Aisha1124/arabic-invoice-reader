@@ -132,14 +132,67 @@ def test_valid_invoice_is_not_queued(
     assert _reviews(client) == []
 
 
-def test_structural_warning_alone_is_not_queued(
+def test_structural_warning_alone_is_queued_for_checked_manually(
     client: TestClient, monkeypatch: pytest.MonkeyPatch
 ) -> None:
+    """A warning means the invoice will be rejected at clearance: a person must see
+    it. Queued as rule name and field path, never the value."""
     _serve(monkeypatch, _invoice(seller_vat_number=None))
     body = _upload(client)
     assert [f["severity"] for f in body["findings"]] == ["warning"]
-    assert body["review"] is None
-    assert _reviews(client) == []
+    assert body["review"] == {
+        "status": "queued",
+        "reference": "R-0001",
+        "resolver_status": None,
+    }
+    (item,) = _reviews(client)
+    assert item["status"] == "compliance"
+    assert item["rule_findings"] == [
+        {"rule": "seller_vat_number_present", "fields": ["seller_vat_number"]}
+    ]
+    assert SELLER_NAME not in client.get("/reviews").text
+
+
+def test_arithmetic_item_also_lists_its_warnings(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _serve(monkeypatch, _invoice(unit_price="12.43", buyer_vat_number=None))
+    _upload(client)
+
+    (item,) = _reviews(client)
+    assert item["status"] == "suggested"
+    assert item["rule_findings"] == [
+        {
+            "rule": "standard_invoice_has_buyer_vat_number",
+            "fields": ["buyer_vat_number"],
+        }
+    ]
+
+
+@pytest.mark.parametrize(
+    "overrides",
+    [
+        {"seller_vat_number": None},
+        {"seller_vat_number": "12345"},
+        {"buyer_vat_number": None},
+        {"unit_price": "12.43"},
+        {"total": "99.99"},
+        {"line_items": []},
+        {
+            "invoice_date": date(2026, 7, 31),
+            "invoice_timestamp": datetime(2026, 8, 1, 9, 0),  # noqa: DTZ001
+        },
+    ],
+)
+def test_every_needs_review_invoice_reaches_the_queue(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch, overrides: dict
+) -> None:
+    _serve(monkeypatch, _invoice(**overrides))
+    body = _upload(client)
+
+    assert body["status"] == "needs_review"
+    assert body["review"]["status"] == "queued"
+    assert len(_reviews(client)) == 1
 
 
 def test_date_mismatch_alone_is_queued_for_checked_manually(
@@ -162,7 +215,7 @@ def test_date_mismatch_alone_is_queued_for_checked_manually(
     }
     (item,) = _reviews(client)
     assert item["status"] == "cross_check"
-    assert item["cross_checks"] == [
+    assert item["rule_findings"] == [
         {
             "rule": "invoice_date_matches_timestamp",
             "fields": ["invoice_date", "invoice_timestamp"],
@@ -415,7 +468,7 @@ def test_qr_disagreement_is_queued_without_any_value(
     assert body["review"]["resolver_status"] is None
     (item,) = _reviews(client)
     assert item["status"] == "cross_check"
-    assert [c["fields"] for c in item["cross_checks"]] == [
+    assert [c["fields"] for c in item["rule_findings"]] == [
         ["seller_vat_number"],
         ["total"],
     ]

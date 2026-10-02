@@ -8,7 +8,7 @@ import pytest
 
 from app import review, store
 from app.resolve import resolve
-from app.schema import CheckStatus, CrossCheck, Invoice, LineItem, Reading, Resolution
+from app.schema import CheckStatus, Invoice, LineItem, Reading, Resolution, RuleFinding
 from app.store import read_resolver_events
 from app.validate import validate
 
@@ -340,9 +340,9 @@ def test_queue_created_before_check_outcomes_is_migrated(db: Path) -> None:
     """A review_queue made by the previous version has no checks column. Its pending
     rows come back with checks None: not recorded, never invented."""
     legacy = review.CREATE_QUEUE.replace(",\n    checks         TEXT", "").replace(
-        ",\n    cross_checks   TEXT", ""
+        ",\n    rule_findings  TEXT", ""
     )
-    assert "\n    checks " not in legacy and "cross_checks" not in legacy
+    assert "\n    checks " not in legacy and "rule_findings" not in legacy
     db.parent.mkdir(parents=True)
     with sqlite3.connect(db) as conn:
         conn.execute(legacy)
@@ -373,8 +373,8 @@ def test_queue_created_before_check_outcomes_is_migrated(db: Path) -> None:
 
 # --- cross-checks: QR disagreements and date-vs-timestamp --------------------------
 
-QR_TOTAL = CrossCheck(rule="total_matches_qr", fields=["total"])
-QR_VAT = CrossCheck(rule="seller_vat_number_matches_qr", fields=["seller_vat_number"])
+QR_TOTAL = RuleFinding(rule="total_matches_qr", fields=["total"])
+QR_VAT = RuleFinding(rule="seller_vat_number_matches_qr", fields=["seller_vat_number"])
 CLEAN_CHECKS = validate(_invoice(unit_price="13.43"), {}).checks
 
 
@@ -382,7 +382,7 @@ def test_cross_check_alone_is_queued_for_checked_manually_only() -> None:
     item = review.submit(AUDIT_ID, SHA, None, CLEAN_CHECKS, [QR_TOTAL, QR_VAT])
 
     assert item.status == "cross_check"
-    assert item.cross_checks == [QR_TOTAL, QR_VAT]
+    assert item.rule_findings == [QR_TOTAL, QR_VAT]
     assert (item.candidates, item.involved, item.failed_checks) == ([], [], [])
     for decision, rank in (("accepted", 1), ("rejected", None)):
         with pytest.raises(ValueError, match="checked_manually"):
@@ -391,10 +391,10 @@ def test_cross_check_alone_is_queued_for_checked_manually_only() -> None:
     assert review.pending() == []
 
 
-def test_cross_checks_are_stored_as_rule_names_and_paths_only(db: Path) -> None:
+def test_rule_findings_are_stored_as_rule_names_and_paths_only(db: Path) -> None:
     review.submit(AUDIT_ID, SHA, None, CLEAN_CHECKS, [QR_TOTAL, QR_VAT])
     with sqlite3.connect(db) as conn:
-        (stored,) = conn.execute("SELECT cross_checks FROM review_queue").fetchone()
+        (stored,) = conn.execute("SELECT rule_findings FROM review_queue").fetchone()
 
     assert json.loads(stored) == [
         {"rule": "total_matches_qr", "fields": ["total"]},
@@ -407,7 +407,7 @@ def test_arithmetic_with_a_cross_check_keeps_the_resolver_outcome() -> None:
     item = review.submit(AUDIT_ID, SHA, resolve(_invoice()), CHECKS, [QR_TOTAL])
 
     assert item.status == "suggested"
-    assert item.cross_checks == [QR_TOTAL]
+    assert item.rule_findings == [QR_TOTAL]
 
 
 def test_cross_check_events_name_the_rules_and_nothing_else() -> None:
@@ -426,11 +426,11 @@ def test_submit_needs_a_resolution_or_a_cross_check() -> None:
         review.submit(AUDIT_ID, SHA, None, CLEAN_CHECKS, [])
 
 
-def test_queue_created_before_cross_checks_is_migrated(db: Path) -> None:
+def test_queue_created_before_rule_findings_is_migrated(db: Path) -> None:
     """Rows queued before cross-checks were stored come back with None: whether
     they had a date mismatch then was never recorded."""
-    legacy = review.CREATE_QUEUE.replace(",\n    cross_checks   TEXT", "")
-    assert "cross_checks" not in legacy
+    legacy = review.CREATE_QUEUE.replace(",\n    rule_findings  TEXT", "")
+    assert "rule_findings" not in legacy
     db.parent.mkdir(parents=True)
     with sqlite3.connect(db) as conn:
         conn.execute(legacy)
@@ -453,7 +453,38 @@ def test_queue_created_before_cross_checks_is_migrated(db: Path) -> None:
     conn.close()
 
     (old,) = review.pending()
-    assert old.cross_checks is None
+    assert old.rule_findings is None
     other_sha = hashlib.sha256(b"other image").hexdigest()
     review.submit(AUDIT_ID, other_sha, None, CLEAN_CHECKS, [QR_TOTAL])
-    assert [item.cross_checks for item in review.pending()] == [None, [QR_TOTAL]]
+    assert [item.rule_findings for item in review.pending()] == [None, [QR_TOTAL]]
+
+
+# --- compliance warnings: queued like cross-checks ----------------------------------
+
+BUYER_VAT_WARNING = RuleFinding(
+    rule="standard_invoice_has_buyer_vat_number", fields=["buyer_vat_number"]
+)
+
+
+def test_warnings_alone_are_queued_as_compliance_for_checked_manually_only() -> None:
+    item = review.submit(AUDIT_ID, SHA, None, CLEAN_CHECKS, [BUYER_VAT_WARNING])
+
+    assert item.status == "compliance"
+    assert item.rule_findings == [BUYER_VAT_WARNING]
+    with pytest.raises(ValueError, match="checked_manually"):
+        review.decide(item.id, "rejected")
+    review.decide(item.id, "checked_manually")
+    decided, submitted = read_resolver_events(10)
+    assert (submitted.event, decided.event) == ("compliance", "checked_manually")
+    assert json.loads(submitted.failed_checks) == [
+        "standard_invoice_has_buyer_vat_number"
+    ]
+
+
+def test_a_cross_check_error_with_warnings_is_a_cross_check_item() -> None:
+    item = review.submit(
+        AUDIT_ID, SHA, None, CLEAN_CHECKS, [BUYER_VAT_WARNING, QR_TOTAL]
+    )
+
+    assert item.status == "cross_check"
+    assert item.rule_findings == [BUYER_VAT_WARNING, QR_TOTAL]

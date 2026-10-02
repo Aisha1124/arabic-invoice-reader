@@ -1,12 +1,14 @@
 """
-Review queue for resolver results and failed cross-checks. A person decides each
-one: accepts a ranked candidate or rejects them all; an unresolvable invoice, or
-one queued for a cross-check alone (a QR disagreement, a date that does not match
-its timestamp), is closed as checked manually. Nothing here changes an invoice
-value: accepting records the decision, it does not apply it.
+Review queue for every invoice with a finding. A person decides each one:
+accepts a ranked candidate or rejects them all; an unresolvable invoice, or one
+queued with nothing for the resolver (a failed cross-check such as a QR
+disagreement, or compliance warnings alone), is closed as checked manually.
+Nothing here changes an invoice value: accepting records the decision, it does
+not apply it.
 
-A cross-check is stored as its rule name and field paths only, never the values
-on either side: a QR disagreement can be about a VAT number.
+Findings the resolver does not handle are stored as rule names and field paths
+only, never the values: a QR disagreement or a format warning can be about a
+VAT number.
 
 The queue holds what a reviewer needs to decide: field paths, the values read
 and the candidate values. It never holds names, VAT numbers, descriptions or
@@ -32,7 +34,8 @@ from typing import Any, Literal
 
 from app import store
 from app.resolve import LINE_CELLS, TOTAL_CELLS
-from app.schema import CheckOutcome, CheckStatus, CrossCheck, Resolution, ReviewItem
+from app.schema import CheckOutcome, CheckStatus, Resolution, ReviewItem, RuleFinding
+from app.validate import CROSS_CHECK_RULES
 
 Decision = Literal["accepted", "rejected", "checked_manually"]
 
@@ -49,21 +52,22 @@ CREATE TABLE IF NOT EXISTS review_queue (
     candidates     TEXT NOT NULL,
     involved       TEXT NOT NULL,
     checks         TEXT,
-    cross_checks   TEXT
+    rule_findings  TEXT
 )
 """
 # Queues made before these were stored lack the columns; their rows keep NULL.
-ADDED_COLUMNS = ("checks", "cross_checks")
+ADDED_COLUMNS = ("checks", "rule_findings")
 # SQLite only: AUTOINCREMENT never reuses a number, even after rows are removed.
 CREATE_COUNTER = (
     "CREATE TABLE IF NOT EXISTS review_counter (n INTEGER PRIMARY KEY AUTOINCREMENT)"
 )
 NEXT_NUMBER = "INSERT INTO review_counter DEFAULT VALUES RETURNING n"
 QUEUE_COLUMNS = tuple(ReviewItem.model_fields)
-JSON_COLUMNS = ("failed_checks", "candidates", "involved", "checks", "cross_checks")
+JSON_COLUMNS = ("failed_checks", "candidates", "involved", "checks", "rule_findings")
 CROSS_CHECK_REASON = "fields disagree with the QR code or with each other"
+COMPLIANCE_REASON = "the invoice may be read right and still not comply with ZATCA"
 # Statuses with nothing to accept or reject.
-MANUAL_ONLY = ("unresolvable", "cross_check")
+MANUAL_ONLY = ("unresolvable", "cross_check", "compliance")
 INSERT_QUEUE = f"INSERT INTO review_queue ({', '.join(QUEUE_COLUMNS)}) VALUES ({', '.join('?' * len(QUEUE_COLUMNS))})"
 SELECT = f"SELECT {', '.join(QUEUE_COLUMNS)} FROM review_queue"
 SELECT_PENDING = f"{SELECT} ORDER BY created_utc, id"
@@ -118,12 +122,12 @@ def submit(
     image_sha256: str,
     resolution: Resolution | None,
     checks: list[CheckOutcome],
-    cross_checks: Sequence[CrossCheck] = (),
+    rule_findings: Sequence[RuleFinding] = (),
 ) -> ReviewItem:
     """Queues the result and logs it; returns the queued item. `resolution` is None
     when only cross-checks failed. An image that already has a pending review keeps
     it, and that item is returned: nothing new is queued or logged."""
-    _check_submittable(image_sha256, resolution, cross_checks)
+    _check_submittable(image_sha256, resolution, rule_findings)
     with store.connection() as (conn, placeholder):
         _create(conn)
         existing = conn.execute(
@@ -138,14 +142,14 @@ def submit(
             created_utc=datetime.now(UTC).isoformat(timespec="microseconds"),
             audit_id=audit_id,
             image_sha256=image_sha256,
-            **_resolved(resolution),
+            **_resolved(resolution, rule_findings),
             # The queue keeps the values read in the failed checks (involved) and
             # no more, so the computed values and differences are dropped here.
             checks=[
                 CheckStatus(**c.model_dump(include=set(CheckStatus.model_fields)))
                 for c in checks
             ],
-            cross_checks=list(cross_checks),
+            rule_findings=list(rule_findings),
         )
         conn.execute(INSERT_QUEUE.replace("?", placeholder), _to_db(item))
         store.insert_resolver_event(conn, placeholder, _submitted_event(item))
@@ -153,15 +157,17 @@ def submit(
 
 
 def _check_submittable(
-    image_sha256: str, resolution: Resolution | None, cross_checks: Sequence[CrossCheck]
+    image_sha256: str,
+    resolution: Resolution | None,
+    rule_findings: Sequence[RuleFinding],
 ) -> None:
     if resolution is not None and resolution.status == "not_needed":
         raise ValueError(
             "resolution status is not_needed: there is nothing to review or log"
         )
-    if resolution is None and not cross_checks:
+    if resolution is None and not rule_findings:
         raise ValueError(
-            "no resolution and no failed cross-check: there is nothing to review"
+            "no resolution and no other finding: there is nothing to review"
         )
     if not store.SHA256_HEX.fullmatch(image_sha256):
         raise ValueError(
@@ -169,12 +175,16 @@ def _check_submittable(
         )
 
 
-def _resolved(resolution: Resolution | None) -> dict[str, Any]:
-    """The item's resolver fields; a cross-check alone has nothing to suggest."""
+def _resolved(
+    resolution: Resolution | None, rule_findings: Sequence[RuleFinding]
+) -> dict[str, Any]:
+    """The item's resolver fields. Without arithmetic there is nothing to suggest:
+    a failed cross-check outranks warnings, since it means a misread."""
     if resolution is None:
+        cross = any(f.rule in CROSS_CHECK_RULES for f in rule_findings)
         return {
-            "status": "cross_check",
-            "reason": CROSS_CHECK_REASON,
+            "status": "cross_check" if cross else "compliance",
+            "reason": CROSS_CHECK_REASON if cross else COMPLIANCE_REASON,
             "failed_checks": [],
             "candidates": [],
             "involved": [],
@@ -187,8 +197,8 @@ def _resolved(resolution: Resolution | None) -> dict[str, Any]:
 
 
 def _logged_checks(item: ReviewItem) -> list[str]:
-    """What the resolver log names: failed checks and cross-check rules, never values."""
-    return item.failed_checks + [c.rule for c in item.cross_checks or []]
+    """What the resolver log names: failed checks and other rule names, never values."""
+    return item.failed_checks + [c.rule for c in item.rule_findings or []]
 
 
 def _submitted_event(item: ReviewItem) -> store.ResolverEvent:

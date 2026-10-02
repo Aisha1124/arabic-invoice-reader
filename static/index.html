@@ -354,7 +354,7 @@
   </div>
 
   <div id="view-review" role="tabpanel" hidden>
-    <p class="review-note">Invoices with a failed check: numbers that do not add up, or fields that disagree with the QR code or with each other. The image is not stored: find the paper invoice by its reference and check the values against it. A decision is recorded; it does not change any extracted value. Keys: ↑ ↓ move through the list, A accept, M checked manually, R reject.</p>
+    <p class="review-note">Every invoice with a finding: numbers that do not add up, fields that disagree with the QR code or with each other, or a ZATCA compliance warning. The image is not stored: find the paper invoice by its reference and check the values against it. A decision is recorded; it does not change any extracted value. Keys: ↑ ↓ move through the list, A accept, M checked manually, R reject.</p>
     <p class="review-status" id="review-status" role="status"></p>
     <div class="queue" id="queue">
       <nav class="inbox" aria-label="Pending reviews"><ol id="inbox"></ol></nav>
@@ -395,6 +395,12 @@ const RULE_SENTENCES = {
   total_matches_qr: () => "The total disagrees with the QR code",
   vat_total_matches_qr: () => "The VAT total disagrees with the QR code",
 };
+// Compliance rules: the invoice may be read right and still not comply. A review item
+// stores rule names only, so the page knows the severity from the name.
+const WARNING_RULES = new Set([
+  "seller_vat_number_present", "seller_vat_number_is_15_digits", "standard_invoice_has_buyer_vat_number",
+  "vat_is_itemised_per_line", "simplified_invoice_has_qr_fields",
+]);
 // The QR cross-check rules: their finding quotes what the QR code says and what was read.
 const QR_RULES = new Set(["seller_vat_number_matches_qr", "timestamp_matches_qr", "total_matches_qr", "vat_total_matches_qr"]);
 // The resolver names checks by label; each maps to the rule that raises the same check.
@@ -415,7 +421,8 @@ const EDITS = {
 };
 const FIELD_NAMES = {
   subtotal: "Subtotal", vat_total: "VAT total", total: "Total", seller_vat_number: "Seller VAT number",
-  invoice_date: "Invoice date", invoice_timestamp: "Timestamp",
+  invoice_date: "Invoice date", invoice_timestamp: "Timestamp", buyer_vat_number: "Buyer VAT number",
+  seller_name: "Seller name",
 };
 
 function lineNumber(fields) {
@@ -489,7 +496,7 @@ function verdict(result) {
   }
   if (errors === 0) {
     return { state: "warnings", word: "Warnings", reference,
-      sentence: `${ran}; ${plural(warnings, "compliance warning")} to look at.` };
+      sentence: `${ran}; ${plural(warnings, "compliance warning")} to look at.${reference ? " Queued for review." : ""}` };
   }
   const others = errors - failedChecks;
   const counts = [];
@@ -553,10 +560,10 @@ function issuesFromChecks(checks, labels) {
   }));
 }
 
-// A review item's failed cross-checks: rule names and field paths, no values.
-function issuesFromCrossChecks(crossChecks) {
-  return crossChecks.map((c) => ({
-    severity: "error", sentence: RULE_SENTENCES[c.rule](null), rule: c.rule,
+// A review item's other findings (cross-checks, warnings): rule names and field paths, no values.
+function issuesFromRuleFindings(ruleFindings) {
+  return ruleFindings.map((c) => ({
+    severity: WARNING_RULES.has(c.rule) ? "warning" : "error", sentence: RULE_SENTENCES[c.rule](null), rule: c.rule,
     message: null, quote: null, computed: null, target: c.fields[0],
   }));
 }
@@ -569,6 +576,10 @@ function resolverPanel(review, item) {
   if (review.status === "error") {
     return { tone: "failed", title: "The resolver failed", candidates: [],
       text: "Nothing was queued. The issues above still stand: check the invoice against the paper." };
+  }
+  if (item && item.status === "compliance") {
+    return { tone: "neutral", title: "Nothing for the resolver to suggest", candidates: [],
+      text: "The invoice may be read right and still not comply with ZATCA, which would get it rejected at clearance. Check the fields listed against the paper invoice." };
   }
   if (item && item.status === "cross_check") {
     return { tone: "neutral", title: "Nothing for the resolver to suggest", candidates: [],
@@ -667,16 +678,16 @@ function flaggedFields(findings, keys) {
 }
 
 // Which decisions fit an item; app/review.py refuses the others.
-const MANUAL_ONLY = new Set(["unresolvable", "cross_check"]);
+const MANUAL_ONLY = new Set(["unresolvable", "cross_check", "compliance"]);
 const DECISIONS = {
   accept: (item) => !MANUAL_ONLY.has(item.status),
   checked_manually: (item) => MANUAL_ONLY.has(item.status),
   reject: (item) => !MANUAL_ONLY.has(item.status),
 };
-const STATUS_WORDS = { suggested: "Suggestion", ambiguous: "Ambiguous", unresolvable: "Unresolvable", cross_check: "Cross-check" };
+const STATUS_WORDS = { suggested: "Suggestion", ambiguous: "Ambiguous", unresolvable: "Unresolvable", cross_check: "Cross-check", compliance: "Compliance" };
 
 function inboxEntry(item) {
-  const failed = item.failed_checks.length + (item.cross_checks || []).length;
+  const failed = item.failed_checks.length + (item.rule_findings || []).length;
   return { reference: item.reference, status: item.status, word: STATUS_WORDS[item.status],
     summary: plural(failed, "failed check") };
 }
@@ -689,8 +700,8 @@ function reviewDetail(item) {
   return {
     heading: `Find paper invoice ${item.reference}`,
     tone: panel.tone, title: panel.title, text: panel.text,
-    issues: [...issuesFromChecks(item.checks, item.failed_checks), ...issuesFromCrossChecks(item.cross_checks || [])],
-    fieldsToCheck: [...new Set((item.cross_checks || []).flatMap((c) => c.fields))].map(plainField),
+    issues: [...issuesFromChecks(item.checks, item.failed_checks), ...issuesFromRuleFindings(item.rule_findings || [])],
+    fieldsToCheck: [...new Set((item.rule_findings || []).flatMap((c) => c.fields))].map(plainField),
     candidates: panel.candidates,
     readings: item.status === "unresolvable"
       ? item.involved.map((r) => ({ field: plainField(r.field), value: r.read_value, arabic: arabicIndic(r.read_value) }))
@@ -1278,7 +1289,7 @@ function drawBar(item, d = reviewDetail(item)) {
   for (const action of ["checked_manually", "reject"]) {
     document.getElementById(`act-${action}`).disabled = deciding || !d.allowed.includes(action);
   }
-  setText("act-hint", item.status === "cross_check"
+  setText("act-hint", d.fieldsToCheck.length && !d.allowed.includes("accept")
     ? "Nothing to accept or reject. Check the fields listed against the paper, then mark it checked manually."
     : !d.allowed.includes("accept")
     ? "Nothing to accept or reject. Check every value against the paper, then mark it checked manually."

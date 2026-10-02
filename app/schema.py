@@ -113,12 +113,12 @@ class ReviewOutcome(BaseModel):
 
     status: Literal["queued", "error"]
     reference: str | None = None
-    # None when queued for a cross-check only: there was no arithmetic to resolve.
+    # None when queued with no arithmetic to resolve (cross-checks or warnings only).
     resolver_status: Literal["suggested", "ambiguous", "unresolvable"] | None = None
 
 
 class ExtractResponse(ExtractionResult):
-    review: ReviewOutcome | None  # None: no error finding, nothing to review
+    review: ReviewOutcome | None  # None: no finding, nothing to review
 
 
 Edit = Literal[
@@ -159,9 +159,10 @@ class Resolution(BaseModel):
     involved: list[Reading] = []
 
 
-class CrossCheck(BaseModel):
-    """A failed cross-check (QR disagreement, date vs timestamp) as the review queue
-    keeps it: the rule and the field paths to check against paper, never values."""
+class RuleFinding(BaseModel):
+    """A finding the resolver does not handle (a failed cross-check or a compliance
+    warning) as the review queue keeps it: the rule and the field paths to check
+    against paper, never values."""
 
     rule: str
     fields: list[str]
@@ -176,15 +177,18 @@ class ReviewItem(BaseModel):
     created_utc: str
     audit_id: str
     image_sha256: str
-    # cross_check: queued for a cross-check alone, with nothing for the resolver.
-    status: Literal["suggested", "ambiguous", "unresolvable", "cross_check"]
+    # cross_check, compliance: queued with nothing for the resolver, for a failed
+    # cross-check (with or without warnings) or for compliance warnings alone.
+    status: Literal[
+        "suggested", "ambiguous", "unresolvable", "cross_check", "compliance"
+    ]
     reason: str
     failed_checks: list[str]
     candidates: list[Candidate]
     involved: list[Reading]
     checks: list[CheckStatus] | None  # None: queued before check outcomes were stored
-    cross_checks: (
-        list[CrossCheck] | None
+    rule_findings: (
+        list[RuleFinding] | None
     )  # None: queued before cross-checks were stored
 
 

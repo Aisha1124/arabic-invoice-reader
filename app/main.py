@@ -25,14 +25,13 @@ from app import review
 from app.extract import ParseError, extract, model_name
 from app.resolve import ARITHMETIC_RULES, resolve
 from app.schema import (
-    CrossCheck,
     ExtractionResult,
     ExtractResponse,
     ReviewItem,
     ReviewOutcome,
+    RuleFinding,
 )
 from app.store import audit_row, read_last, write_audit
-from app.validate import CROSS_CHECK_RULES
 
 logger = logging.getLogger(__name__)
 
@@ -118,18 +117,19 @@ async def post_extract(request: Request) -> ExtractResponse:
     image_sha256 = hashlib.sha256(image).hexdigest()
     row = audit_row(image_sha256, result, metadata)
     write_audit(row)
-    # Every error finding reaches a person: arithmetic through the resolver,
-    # cross-checks as rule names and field paths only.
+    # Every finding reaches a person, so every needs_review invoice is queued:
+    # arithmetic through the resolver, everything else (cross-checks, compliance
+    # warnings) as rule names and field paths only.
     arithmetic = any(f.rule in RESOLVER_RULES for f in result.findings)
-    cross_checks = [
-        CrossCheck(rule=f.rule, fields=f.fields)
+    rule_findings = [
+        RuleFinding(rule=f.rule, fields=f.fields)
         for f in result.findings
-        if f.rule in CROSS_CHECK_RULES
+        if f.rule not in RESOLVER_RULES
     ]
     queued = None
-    if arithmetic or cross_checks:
+    if arithmetic or rule_findings:
         queued = _queue_for_review(
-            row.id, image_sha256, result, arithmetic, cross_checks
+            row.id, image_sha256, result, arithmetic, rule_findings
         )
     return ExtractResponse(**dict(result), review=queued)
 
@@ -139,7 +139,7 @@ def _queue_for_review(
     image_sha256: str,
     result: ExtractionResult,
     arithmetic: bool,
-    cross_checks: list[CrossCheck],
+    rule_findings: list[RuleFinding],
 ) -> ReviewOutcome:
     """A resolver or queue failure must not cost the user a successful extraction:
     the invoice is already needs_review, and the response says the review was not
@@ -147,7 +147,7 @@ def _queue_for_review(
     try:
         resolution = resolve(result.invoice) if arithmetic else None
         item = review.submit(
-            audit_id, image_sha256, resolution, result.checks, cross_checks
+            audit_id, image_sha256, resolution, result.checks, rule_findings
         )
     except Exception as exc:  # noqa: BLE001 - deliberate: the extraction stands regardless
         logger.error(
@@ -157,7 +157,7 @@ def _queue_for_review(
     return ReviewOutcome(
         status="queued",
         reference=item.reference,
-        resolver_status=None if item.status == "cross_check" else item.status,
+        resolver_status=None if resolution is None else item.status,
     )
 
 
