@@ -84,7 +84,8 @@ async def visitor_database(
             store.VISITOR_DB.reset(token)
 
 
-@app.get("/", include_in_schema=False)
+# HEAD too: hosts' health checks (Render's) send HEAD / and got 405 from GET alone.
+@app.api_route("/", methods=["GET", "HEAD"], include_in_schema=False)
 def index() -> FileResponse:
     return FileResponse(STATIC_DIR / "index.html")
 
@@ -246,6 +247,7 @@ def get_demo_samples() -> list[dict[str, str | None]]:
             "label": s.label,
             "image": f"/static/demo/{s.image}",
             "note": s.note,
+            "tooltip": s.tooltip,
         }
         for s in demo.SAMPLES
     ]

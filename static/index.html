@@ -60,6 +60,13 @@
   .samples { display: flex; flex-wrap: wrap; align-items: center; gap: var(--s2); padding: var(--s4) var(--s5); background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); }
   .samples .label { font-weight: 600; margin-inline-end: var(--s2); }
   .samples #demo-reset { margin-inline-start: auto; }
+  .demo-intro { margin: 0 0 var(--s4); }
+  .demo-intro p { margin: 0 0 var(--s1); }
+  .demo-intro a, .upload-locked a { color: var(--queued); font-weight: 500; }
+  .upload-locked { display: flex; align-items: flex-start; gap: var(--s3); margin-block-start: var(--s4); padding: var(--s4) var(--s5); border: 2px dashed var(--line); border-radius: var(--radius); background: var(--neutral-bg); color: var(--muted); cursor: not-allowed; }
+  .upload-locked .ic { inline-size: 1.4em; block-size: 1.4em; margin-block-start: 2px; }
+  .upload-locked p { margin: 0 0 var(--s1); }
+  .upload-locked a { cursor: pointer; }
   .sample-note { margin: var(--s3) 0 0; padding: var(--s2) var(--s3); border-inline-start: 4px solid var(--warn); background: var(--warn-bg); border-radius: 4px; font-weight: 500; }
 
   /* Upload */
@@ -255,6 +262,7 @@
   <symbol id="i-queued" viewBox="0 0 24 24"><path d="M3 13l3-8h12l3 8v6H3z"/><path d="M3 13h5l1.5 2.5h5L16 13h5"/></symbol>
   <symbol id="i-none" viewBox="0 0 24 24"><circle cx="12" cy="12" r="8.5"/><path d="M8 12h8"/></symbol>
   <symbol id="i-copy" viewBox="0 0 24 24"><rect x="8" y="8" width="12" height="12" rx="2"/><path d="M16 8V5a1 1 0 0 0-1-1H5a1 1 0 0 0-1 1v10a1 1 0 0 0 1 1h3"/></symbol>
+  <symbol id="i-lock" viewBox="0 0 24 24"><rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/></symbol>
   <symbol id="i-image" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="2"/><circle cx="9" cy="10" r="1.8"/><path d="M21 16l-5-5-9 9"/></symbol>
 </svg>
 <main>
@@ -270,12 +278,24 @@
   </nav>
 
   <div id="view-extract" role="tabpanel">
+  <div class="demo-intro" id="demo-intro" hidden>
+    <p>AI reads the invoice; arithmetic and the invoice's ZATCA QR code check its work, and anything suspicious goes to a person.</p>
+    <p>On real receipt lines, GPT-4o read Western digits correctly 94.4% of the time and Arabic-Indic digits 31.0%.</p>
+    <p>Try Single misread, then open the Review queue. <a href="https://github.com/Aisha1124/arabic-invoice-reader">Code and method on GitHub</a></p>
+  </div>
   <div class="samples" id="samples" hidden>
     <span class="label">Pick a sample</span>
     <span id="sample-buttons"></span>
     <button class="btn" type="button" id="demo-reset">Reset demo</button>
   </div>
   <p class="sample-note" id="sample-note" hidden></p>
+  <div class="upload-locked" id="upload-locked" aria-disabled="true" hidden>
+    <svg class="ic" aria-hidden="true"><use href="#i-lock"/></svg>
+    <div>
+      <p>Upload your own invoice: available when you run the app with your own OpenAI API key. Reading a real invoice calls the model and costs money per invoice, so this public demo uses saved samples instead.</p>
+      <a href="https://github.com/Aisha1124/arabic-invoice-reader#how-to-run-it">How to run it with your own key</a>
+    </div>
+  </div>
   <div id="drop" tabindex="0" role="button" aria-label="Choose an invoice image">
     <svg class="ic" aria-hidden="true"><use href="#i-image"/></svg>
     <div><strong>Choose an invoice image</strong> or drag it here</div>
@@ -1391,22 +1411,28 @@ async function startDemo() {
   visitor = Array.from(crypto.getRandomValues(new Uint8Array(16)), (b) => b.toString(16).padStart(2, "0")).join("");
   document.getElementById("demo-banner").hidden = false;
   document.getElementById("drop").hidden = true;
-  document.getElementById("samples").hidden = false;
+  for (const id of ["demo-intro", "samples", "upload-locked"]) document.getElementById(id).hidden = false;
   // The preview is a synthetic sample from the server here, not a file from the device.
   for (const note of document.querySelectorAll(".preview .note, #image-dialog .note")) {
     note.textContent = "Synthetic sample invoice from the demo, not an upload.";
   }
   const buttons = document.getElementById("sample-buttons");
+  let samples;
   try {
-    for (const sample of await (await fetch("/demo/samples")).json()) {
-      const button = el("button", "btn", sample.label);
-      button.type = "button";
-      button.addEventListener("click", () => runSample(sample));
-      buttons.append(button, " ");
-    }
+    samples = await (await fetch("/demo/samples")).json();
   } catch (err) {
     buttons.append(el("span", "none", `The samples could not be loaded: ${err.message}`));
+    return;
   }
+  for (const sample of samples) {
+    const button = el("button", "btn", sample.label);
+    button.type = "button";
+    button.title = sample.tooltip;
+    button.addEventListener("click", () => runSample(sample));
+    buttons.append(button, " ");
+  }
+  // A first screen with real results: the sample that shows the most checks at work.
+  await runSample(samples.find((s) => s.id === "qr-disagrees"));
 }
 
 async function runSample(sample) {

@@ -267,3 +267,11 @@ def test_image_copies_no_secrets_cache_or_data() -> None:
     )
     for word in ("API_KEY", "TOKEN", "SECRET", ".env", "OPENAI"):
         assert word not in instructions, word
+
+
+def test_every_sample_says_what_it_shows(client: TestClient) -> None:
+    samples = client.get("/demo/samples").json()
+
+    tips = [s["tooltip"] for s in samples]
+    assert all(tip and len(tip) <= 120 for tip in tips), tips
+    assert len(set(tips)) == len(tips)

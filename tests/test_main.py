@@ -497,3 +497,11 @@ def test_qr_not_read_is_reported_and_queues_nothing(
 
     assert body["qr"] == {"status": "not_read", "reason": "no QR code found"}
     assert body["review"] is None
+
+
+def test_home_page_answers_head_for_health_checks(client: TestClient) -> None:
+    """Render's health check sends HEAD /; it got 405 when only GET was routed."""
+    response = client.head("/")
+    assert response.status_code == 200
+    assert response.headers["content-type"].startswith("text/html")
+    assert response.content == b""

@@ -1141,3 +1141,45 @@ def test_every_queue_and_log_request_carries_the_visitor_id() -> None:
         'api("/demo/reset"',
     ):
         assert route in PAGE, route
+
+
+# --- the demo's first screen ------------------------------------------------------------
+
+README = (ROOT / "README.md").read_text(encoding="utf-8")
+REPO = "https://github.com/Aisha1124/arabic-invoice-reader"
+
+
+def test_demo_intro_uses_only_the_readmes_numbers() -> None:
+    intro = PAGE[PAGE.index('id="demo-intro"') :]
+    intro = intro[: intro.index("</div>")]
+    numbers = re.findall(r"\d+(?:\.\d+)?%", intro)
+    assert numbers == ["94.4%", "31.0%"]
+    for number in numbers:
+        assert number in README
+    assert "Try Single misread, then open the Review queue." in intro
+    assert f'href="{REPO}"' in intro and "Code and method on GitHub" in intro
+
+
+def test_locked_upload_explains_the_cost_and_links_to_running_it() -> None:
+    locked = PAGE[PAGE.index('id="upload-locked"') :]
+    locked = locked[: locked.index("</div>\n  </div>")]
+    assert (
+        "Upload your own invoice: available when you run the app with your own OpenAI"
+        " API key. Reading a real invoice calls the model and costs money per invoice,"
+        " so this public demo uses saved samples instead."
+    ) in " ".join(locked.split())
+    assert f'href="{REPO}#how-to-run-it"' in locked
+    assert "## How to run it" in README
+    assert 'aria-disabled="true"' in locked and "#i-lock" in locked
+
+
+def test_demo_opens_on_the_qr_sample() -> None:
+    start = PAGE[PAGE.index("async function startDemo()") :]
+    start = start[: start.index("\n}\n")]
+    assert 'runSample(samples.find((s) => s.id === "qr-disagrees"))' in start
+
+
+def test_readme_links_the_live_demo_and_warns_about_the_first_load() -> None:
+    top = README[: README.index("## The finding")]
+    assert "https://arabic-invoice-reader.onrender.com" in top
+    assert "about a minute" in top

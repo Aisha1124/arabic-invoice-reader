@@ -45,21 +45,45 @@ class Sample(NamedTuple):
     label: str
     image: str  # file name in static/demo/
     response: str  # saved model response in static/demo/
+    tooltip: str  # what the sample shows, on its button
     note: str | None = None
 
 
 SAMPLES = (
-    Sample("clean", "Clean invoice", "INV-2026-1000.png", "INV-2026-1000.json"),
-    Sample("many-misreads", "Many misreads", "INV-2026-1002.png", "INV-2026-1002.json"),
-    Sample("warnings-only", "Warnings only", "INV-2026-1009.png", "INV-2026-1009.json"),
     Sample(
-        "qr-disagrees", "QR code disagrees", "INV-2026-1012.png", "INV-2026-1012.json"
+        "clean",
+        "Clean invoice",
+        "INV-2026-1000.png",
+        "INV-2026-1000.json",
+        "Every check passes, so nothing goes to review.",
+    ),
+    Sample(
+        "many-misreads",
+        "Many misreads",
+        "INV-2026-1002.png",
+        "INV-2026-1002.json",
+        "Many Arabic-Indic amounts misread: the sums fail and no single value explains it.",
+    ),
+    Sample(
+        "warnings-only",
+        "Warnings only",
+        "INV-2026-1009.png",
+        "INV-2026-1009.json",
+        "The sums add up, but VAT is not itemised per line: a ZATCA compliance warning.",
+    ),
+    Sample(
+        "qr-disagrees",
+        "QR code disagrees",
+        "INV-2026-1012.png",
+        "INV-2026-1012.json",
+        "The date, VAT number and totals as read disagree with the invoice's QR code.",
     ),
     Sample(
         "single-misread",
         "Single misread",
         "INV-2026-1010.png",
         "single-misread.json",
+        "One digit altered on purpose: the resolver suggests values that make the sums add up.",
         note="One value altered on purpose to show how suggestions work.",
     ),
 )

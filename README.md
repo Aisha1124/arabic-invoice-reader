@@ -1,5 +1,9 @@
 # Arabic/English Invoice Reader
 
+**[Try it live](https://arabic-invoice-reader.onrender.com)**: saved model output on
+synthetic invoices, no upload needed. It runs on a free host, so the first load can
+take about a minute.
+
 Reads an image of a Saudi tax invoice into structured fields with gpt-4o, checks
 the numbers against each other, against the invoice's ZATCA QR code when it has
 one, and against ZATCA field rules, and sends invoices with a failed check to a
@@ -151,7 +155,7 @@ or the date: the invoice reaches review only because its arithmetic fails.
 
 ## Tests
 
-406 tests, all passing, all offline (no API calls). They include:
+412 tests, all passing, all offline (no API calls). They include:
 
 - nine invoices with one known confusion injected (٣→٢, ٨٤→٤٨, a dropped
   digit, …), one per kind of cell, each checked for the right cell and the
@@ -236,7 +240,7 @@ Python 3.11+.
 python3 -m venv .venv
 .venv/bin/pip install -r requirements.txt
 cp .env.example .env              # set OPENAI_API_KEY and OPENAI_MODEL
-.venv/bin/python -m pytest        # 406 passed here, with the sample images present
+.venv/bin/python -m pytest        # 412 passed here, with the sample images present
 ```
 
 The app does not read `.env` itself:
